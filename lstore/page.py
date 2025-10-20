@@ -26,7 +26,7 @@ class Page:
 
         offset = self.num_records * 8
 
-        value_bytes = value.to_bytes(8, bytearray="little", signed=False)
+        value_bytes = value.to_bytes(8, byteorder="little", signed=False)
         self.data[offset : offset + 8] = value_bytes
 
         self.num_records += 1
@@ -53,29 +53,32 @@ class Page:
 
     
 # BasePage and TailPage are identical in physical view but is different in logic view
+# Notice: We also import metadata columns from L-store design
 class BasePage():
     # Only write when insert new records
     def __init__(self, num_columns):
         self.num_columns = num_columns
-        self.physical_pages = [Page() for _ in range(num_columns + 3)]
         
         # column indexes
-        self.RID_COLUMN = 0
-        self.INDIRECTION_COLUMN = 1
-        self.SCHEMA_ENCODING_COLUMN = 2
-        self.USER_COLUMN_START = 3
+        self.INDIRECTION_COLUMN = 0
+        self.RID_COLUMN = 1
+        self.TIMESTAMP_COLUMN = 2
+        self.SCHEMA_ENCODING_COLUMN = 3
+        self.USER_COLUMN_START = 4
         
-        self.num_columns = 0
+        self.physical_pages = [Page() for _ in range(self.USER_COLUMN_START + num_columns)]
+        self.num_records = 0
         
     def has_capacity(self):
         return self.physical_pages[0].has_capacity()
 
-    def insert_record(self, rid, columns):
+    def insert_record(self, rid, timestamp, columns):
         if not self.has_capacity():
             return False
         
-        self.physical_pages[self.RID_COLUMN].write(rid)
         self.physical_pages[self.INDIRECTION_COLUMN].write(0)
+        self.physical_pages[self.RID_COLUMN].write(rid)
+        self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
         self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(0)
         
         for i, value in enumerate(columns):
@@ -84,30 +87,35 @@ class BasePage():
         self.num_records += 1
         return True
     
+    # # Maybe we should define read()
+    # def read_record():
+    
 
 class TailPage():
     # Only write when update existing records
     def __init__(self, num_columns):
         self.num_columns = num_columns
-        self.physical_pages = [Page() for _ in range(num_columns + 3)]
         
         # column indexes
-        self.RID_COLUMN = 0
-        self.INDIRECTION_COLUMN = 1
-        self.SCHEMA_ENCODING_COLUMN = 2
-        self.USER_COLUMN_START = 3
+        self.INDIRECTION_COLUMN = 0
+        self.RID_COLUMN = 1
+        self.TIMESTAMP_COLUMN = 2
+        self.SCHEMA_ENCODING_COLUMN = 3
+        self.USER_COLUMN_START = 4
         
-        self.num_columns = 0
+        self.physical_pages = [Page() for _ in range(self.USER_COLUMN_START + num_columns)]
+        self.num_records = 0
         
     def has_capacity(self):
         return self.physical_pages[0].has_capacity()
     
-    def append_update(self, rid, indirection, schema_encoding, columns):
+    def append_update(self, rid, indirection, timestamp, schema_encoding, columns):
         if not self.has_capacity():
             return False
         
-        self.physical_pages[self.RID_COLUMN].write(rid)
         self.physical_pages[self.INDIRECTION_COLUMN].write(indirection)
+        self.physical_pages[self.RID_COLUMN].write(rid)
+        self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
         self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(schema_encoding)
         
         for i, value in enumerate(columns):
@@ -116,4 +124,10 @@ class TailPage():
         
         self.num_records += 1
         return True
+    
+    # # Maybe we should define read()
+    # def read_record():
 
+
+# Questions: how to represent NULL?
+# I use 0 in insert_record() and append_update()
