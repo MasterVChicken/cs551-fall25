@@ -4,6 +4,7 @@ A data strucutre holding indices for various columns of a table. Key column shou
 
 from collections import OrderedDict
 
+# data structure used to store the index
 class OrderedDictList:
     def __init__(self):
          self.data = OrderedDict()
@@ -13,6 +14,13 @@ class OrderedDictList:
             self.data[key] = []
         self.data[key].append(value)
 
+    def value_in_range(self, begin, end):
+        res = []
+        for key, values in self.data.items():
+            if begin <= key <= end:
+                res.append(self.data[key])
+        return res
+
 class Index:
 
     def __init__(self, table):
@@ -20,10 +28,6 @@ class Index:
         self.indices = [None] *  table.num_columns
         self.table = table
         pass
-
-    """
-    # returns the location of all records with the given value on column "column"
-    """
 
     def create_index(self, column_idx):
         if self.indices[column_idx]:
@@ -39,17 +43,33 @@ class Index:
         # insert rid and value into dict
         for rid, value in res:
             self.indices[column_idx].add(value, rid)
-            
+
+    """
+    # returns the location of all records with the given value on column "column"
+    """     
 
     def locate(self, column, value):
-        pass
+        if column > len(self.indices):
+            ValueError('Invalid column index')
+        
+        if self.indices[column]:
+            res = self.indices[column][value]
+            return res
+        else:
+            ValueError('No such index existed')
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
 
     def locate_range(self, begin, end, column):
-        pass
+        if column > len(self.indices):
+            ValueError('Invalid column index')
+        
+        if self.indices[column]:
+            return self.indices[column].value_in_range(begin, end)
+        else:
+            ValueError('No such index existed')
 
     """
     # optional: Create index on specific column

@@ -9,7 +9,7 @@ RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
 
-page_capacity = 4096 // 8
+PAGE_CAPACITY = 4096 // 8
 
 class Record:
 
@@ -168,8 +168,8 @@ class Table:
         
         for i in range(num_records):
             # get page index and local record index (in one page)
-            page_index = i // page_capacity
-            record_index = i % page_capacity
+            page_index = i // PAGE_CAPACITY
+            record_index = i % PAGE_CAPACITY
             # read from page
             if(page_type == 'Base'):
                 res = self.page_directory.read_base_record(page_index, record_index)
