@@ -9,6 +9,8 @@ RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
 
+page_capacity = 4096 // 8
+
 class Record:
 
     def __init__(self, rid, key, columns):
@@ -155,6 +157,31 @@ class Table:
         self.index = Index(self)
         pass
     
+    def get_column_values(self, column_idx, page_type = 'Base'):
+        if column_idx > len(self.num_columns):
+            raise ValueError("Invalid column idx")
+        
+        if page_type != 'Base' and page_type != 'Tail':
+            raise ValueError("invalid page type")
+
+        num_records = self.page_directory.num_base_records if page_type == 'Base' else self.page_directory.num_tail_records
+        
+        for i in range(num_records):
+            # get page index and local record index (in one page)
+            page_index = i // page_capacity
+            record_index = i % page_capacity
+            # read from page
+            if(page_type == 'Base'):
+                res = self.page_directory.read_base_record(page_index, record_index)
+            else:
+                res = self.page_directory.read_tail_record(page_index, record_index)
+            col_value = res['columns'][column_idx]
+            rid = res['rid']
+
+            # return rid, col_value Iteratively
+            yield rid, col_value
+
+    
     def add_record(self, columns, page_type = 'Base'):
         if(len(columns) != self.num_columns):
             ValueError("Input columns length not matches table columns")
@@ -171,10 +198,11 @@ class Table:
             schema_encoding = '0'
             res = self.page_directory.append_tail_record(rid, timestamp, schema_encoding, columns)
 
-            pass
-
         else:
             ValueError("invalid page type.")
+
+    def delete(self):
+        pass
 
     # Is merge not required?
     def __merge(self):

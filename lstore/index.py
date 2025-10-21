@@ -2,16 +2,44 @@
 A data strucutre holding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
 
+from collections import OrderedDict
+
+class OrderedDictList:
+    def __init__(self):
+         self.data = OrderedDict()
+    
+    def add(self, key, value):
+        if key not in self.data:
+            self.data[key] = []
+        self.data[key].append(value)
+
 class Index:
 
     def __init__(self, table):
         # One index for each table. All our empty initially.
         self.indices = [None] *  table.num_columns
+        self.table = table
         pass
 
     """
     # returns the location of all records with the given value on column "column"
     """
+
+    def create_index(self, column_idx):
+        if self.indices[column_idx]:
+            raise ValueError(f"Key {column_idx} already has a index")
+        
+        # use OrderedDict for index
+        self.indices[column_idx] = OrderedDictList()
+
+        # get column value and rid from table
+        res = list(self.table.get_column_values(column_idx))
+        res.sort(lambda res: res[0])
+        
+        # insert rid and value into dict
+        for rid, value in res:
+            self.indices[column_idx].add(value, rid)
+            
 
     def locate(self, column, value):
         pass
