@@ -2,6 +2,8 @@ from lstore.index import Index
 from time import time
 from page import *
 
+from datetime import datetime
+
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
@@ -148,10 +150,32 @@ class Table:
         self.name = name
         self.key = key  # Which column is primary key?
         self.num_columns = num_columns
-        self.page_directory = {}
+        # self.page_directory = {}
+        self.page_directory = PageRange(0, num_columns) # set range_id to 0
         self.index = Index(self)
         pass
     
+    def add_record(self, columns, page_type = 'Base'):
+        if(len(columns) != self.num_columns):
+            ValueError("Input columns length not matches table columns")
+
+        if(page_type == 'Base'):
+            rid = self.page_directory.num_base_records
+            timestamp = int(datetime.now().current_datetime.timestamp())
+            # schema_encoding?
+            res = self.page_directory.insert_base_record(rid, timestamp, columns)
+
+        elif(page_type == 'Tail'):
+            rid = self.page_directory.num_tail_records
+            timestamp = int(datetime.now().current_datetime.timestamp())
+            schema_encoding = '0'
+            res = self.page_directory.append_tail_record(rid, timestamp, schema_encoding, columns)
+
+            pass
+
+        else:
+            ValueError("invalid page type.")
+
     # Is merge not required?
     def __merge(self):
         print("merge is happening")

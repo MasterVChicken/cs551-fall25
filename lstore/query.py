@@ -1,6 +1,14 @@
 from lstore.table import Table, Record
 from lstore.index import Index
+from datetime import datetime
 
+INDIRECTION_COLUMN = 0
+RID_COLUMN = 1
+TIMESTAMP_COLUMN = 2
+SCHEMA_ENCODING_COLUMN = 3
+USER_COLUMN_START = 4
+
+COL_OFFSET = 5
 
 class Query:
     """
@@ -30,7 +38,21 @@ class Query:
     # Returns False if insert fails for whatever reason
     """
     def insert(self, *columns):
-        schema_encoding = '0' * self.table.num_columns
+        # # first 5 for rid, indirection, timestamp, schema, col start
+        # total_num_col = len(columns) + COL_OFFSET
+        # new_columns = [None for _ in range(total_num_col)]
+
+        # # schema_encoding = '0' * self.table.num_columns
+        # new_columns[INDIRECTION_COLUMN] = -1
+        # new_columns[RID_COLUMN] = self.table.page_directory.num_base_records
+        # new_columns[TIMESTAMP_COLUMN] = int(datetime.now().current_datetime.timestamp())
+        # new_columns[COL_OFFSET:] = columns[:]
+
+        # add the record to table
+        self.table.add_record(columns, "Base")
+
+        # create a index for the record
+
         pass
 
     
