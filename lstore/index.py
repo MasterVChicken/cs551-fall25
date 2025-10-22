@@ -28,22 +28,7 @@ class Index:
         self.indices = [None] *  table.num_columns
         self.table = table
         pass
-
-    def create_index(self, column_idx):
-        if self.indices[column_idx]:
-            raise ValueError(f"Key {column_idx} already has a index")
         
-        # use OrderedDict for index
-        self.indices[column_idx] = OrderedDictList()
-
-        # get column value and rid from table
-        res = list(self.table.get_column_values(column_idx))
-        res.sort(lambda res: res[0])
-        
-        # insert rid and value into dict
-        for rid, value in res:
-            self.indices[column_idx].add(value, rid)
-
     """
     # returns the location of all records with the given value on column "column"
     """     
@@ -76,7 +61,19 @@ class Index:
     """
 
     def create_index(self, column_number):
-        pass
+        if self.indices[column_number]:
+            raise ValueError(f"Key {column_number} already has a index")
+        
+        # use OrderedDict for index
+        self.indices[column_number] = OrderedDictList()
+
+        # get column value and rid from table
+        res = list(self.table.col_iterator(column_number))
+        res.sort(lambda res: res[0])
+        
+        # insert rid and value into dict
+        for rid, value in res:
+            self.indices[column_number].add(value, rid)
 
     """
     # optional: Drop index of specific column

@@ -157,7 +157,60 @@ class Table:
         self.index = Index(self)
         pass
     
-    def get_column_values(self, column_idx, page_type = 'Base'):
+    def get_version_rid(self, rid, relative_version):
+
+        # base record
+        page_idx = PAGE_CAPACITY // rid
+        record_idx = PAGE_CAPACITY % rid
+
+        record = self.page_directory.read_base_record(page_idx, record_idx)
+        indirection = record['indirection']
+
+        # not indirection
+        if indirection == 0:
+            return rid, 'Base'
+        
+        # 1st updated record
+        rid = indirection
+        page_idx = PAGE_CAPACITY // rid
+        record_idx = PAGE_CAPACITY % rid
+
+        record = self.page_directory.read_base_record(page_idx, record_idx)
+        indirection = record['indirection']
+        
+        version = 0
+        while version > relative_version and indirection != -1:
+            rid = indirection
+            page_idx = PAGE_CAPACITY // rid
+            record_idx = PAGE_CAPACITY % rid
+
+            record = self.page_directory.read_base_record(page_idx, record_idx)
+            indirection = record['indirection']
+
+            version -= 1
+        
+        return rid, 'Tail'
+
+
+    def get_col_value(self, rid, column_idx, page_type = 'Base'):
+        if column_idx > len(self.num_columns):
+            raise ValueError("Invalid column idx")
+        
+        if page_type != 'Base' and page_type != 'Tail':
+            raise ValueError("invalid page type")
+        
+        page_idx = rid // PAGE_CAPACITY
+        record_index =  rid % PAGE_CAPACITY
+
+        if page_type == 'Base':
+            cols = self.page_directory.read_base_record(page_idx, record_index)
+            return cols['columns'][column_idx]
+        else:
+            cols = self.page_directory.read_tail_record(page_idx, record_index)
+            return cols['columns'][column_idx]
+
+    # return a column iteratively
+    def col_iterator(self, column_idx, page_type = 'Base'):
         if column_idx > len(self.num_columns):
             raise ValueError("Invalid column idx")
         
@@ -168,13 +221,13 @@ class Table:
         
         for i in range(num_records):
             # get page index and local record index (in one page)
-            page_index = i // PAGE_CAPACITY
+            page_idx = i // PAGE_CAPACITY
             record_index = i % PAGE_CAPACITY
             # read from page
             if(page_type == 'Base'):
-                res = self.page_directory.read_base_record(page_index, record_index)
+                res = self.page_directory.read_base_record(page_idx, record_index)
             else:
-                res = self.page_directory.read_tail_record(page_index, record_index)
+                res = self.page_directory.read_tail_record(page_idx, record_index)
             col_value = res['columns'][column_idx]
             rid = res['rid']
 
@@ -196,6 +249,7 @@ class Table:
             rid = self.page_directory.num_tail_records
             timestamp = int(datetime.now().current_datetime.timestamp())
             schema_encoding = '0'
+            # indirection?
             res = self.page_directory.append_tail_record(rid, timestamp, schema_encoding, columns)
 
         else:

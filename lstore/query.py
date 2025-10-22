@@ -66,7 +66,8 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        pass
+        self.select_version(search_key, search_key_index, projected_columns_index, 0)
+        
 
     
     """
@@ -80,7 +81,33 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        pass
+        selected_rids = self.table.index.locate(search_key_index, search_key)
+        records_list = []
+        for rid in selected_rids:
+            res_col = []
+            for col_idx, projected_value in enumerate(projected_columns_index):
+                # if projected_value is 1, get data of this column from base page
+                if projected_value:
+                    col_value = self.table.page_directory.get_col_value(rid, col_idx, 'Base')
+                    res_col.append(col_value)
+                # for 0 value, should we append None?
+                # else:
+                #     res_col.appned()
+
+            # get data matched the relative version from base value
+            next_rid, page_type = self.table.get_version_rid(rid, relative_version)
+
+            if page_type == 'Tail':
+                # need to edit schema?
+                # schema = self.tabel.get_col_value(next_rid, SCHEMA_ENCODING_COLUMN, page_type)
+                for col_idx in range(len(projected_columns_index)):
+                    col_value = self.table.page_directory.get_col_value(next_rid, col_idx, page_type)
+                    res_col.append(col_value)
+
+            record = Record(next_rid, self.table.key, res_col)
+            records_list.append(record)
+        
+        return records_list
 
     
     """
