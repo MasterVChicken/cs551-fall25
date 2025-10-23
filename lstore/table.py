@@ -155,6 +155,10 @@ class Table:
         # self.page_directory = {}
         self.page_directory = PageRange(0, num_columns) # set range_id to 0
         self.index = Index(self)
+        
+        # ***** new added
+        self.key_to_rid = {} # primary key value -> rid mapping
+        
         pass
     
     def get_version_rid(self, rid, relative_version):
@@ -254,8 +258,22 @@ class Table:
 
         else:
             ValueError("invalid page type.")
+            
+            
+        # add to key_to_rid mapping if primary key column
+        if self.key is not None:
+            key_value = columns[self.key]
+            self.key_to_rid[key_value] = rid
+    
+    # TODO: use a dictionary to store all records or using page_directory?
+    def get_record_by_rid(self, rid):
+        pass
 
     def delete(self):
+        pass
+    
+    # TODO: implement delete by rid
+    def delete_record_by_rid(self, rid):
         pass
 
     # Is merge not required?
