@@ -164,8 +164,8 @@ class Table:
     def get_version_rid(self, rid, relative_version):
 
         # base record
-        page_idx = PAGE_CAPACITY // rid
-        record_idx = PAGE_CAPACITY % rid
+        page_idx =  rid // PAGE_CAPACITY
+        record_idx = rid % PAGE_CAPACITY
 
         record = self.page_directory.read_base_record(page_idx, record_idx)
         indirection = record['indirection']
@@ -176,8 +176,8 @@ class Table:
         
         # 1st updated record
         rid = indirection
-        page_idx = PAGE_CAPACITY // rid
-        record_idx = PAGE_CAPACITY % rid
+        page_idx = rid // PAGE_CAPACITY
+        record_idx = rid % PAGE_CAPACITY
 
         record = self.page_directory.read_base_record(page_idx, record_idx)
         indirection = record['indirection']
@@ -185,8 +185,8 @@ class Table:
         version = 0
         while version > relative_version and indirection != -1:
             rid = indirection
-            page_idx = PAGE_CAPACITY // rid
-            record_idx = PAGE_CAPACITY % rid
+            page_idx = rid // PAGE_CAPACITY
+            record_idx = rid % PAGE_CAPACITY
 
             record = self.page_directory.read_base_record(page_idx, record_idx)
             indirection = record['indirection']
@@ -238,7 +238,7 @@ class Table:
             # return rid, col_value Iteratively
             yield rid, col_value
 
-    
+    # don't need this (?) directly call page range func: insert_base_record() & append_tail_record()
     def add_record(self, columns, page_type = 'Base'):
         if(len(columns) != self.num_columns):
             ValueError("Input columns length not matches table columns")
@@ -274,6 +274,8 @@ class Table:
     
     # TODO: implement delete by rid
     def delete_record_by_rid(self, rid):
+        # set rid to -1 (or other invalidate value) ?
+        # need a page range func to set value from column, write_base_record()
         pass
 
     # Is merge not required?
