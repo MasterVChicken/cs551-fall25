@@ -10,6 +10,8 @@ USER_COLUMN_START = 4
 
 COL_OFFSET = 5
 
+PAGE_CAPACITY = 4096 // 8
+
 class Query:
     """
     # Creates a Query object that can perform different queries on the specified table 
@@ -45,21 +47,20 @@ class Query:
     """
     def insert(self, *columns):
         # # first 5 for rid, indirection, timestamp, schema, col start
-        # total_num_col = len(columns) + COL_OFFSET
-        # new_columns = [None for _ in range(total_num_col)]
 
-        # # schema_encoding = '0' * self.table.num_columns
-        # new_columns[INDIRECTION_COLUMN] = -1
-        # new_columns[RID_COLUMN] = self.table.page_directory.num_base_records
-        # new_columns[TIMESTAMP_COLUMN] = int(datetime.now().current_datetime.timestamp())
-        # new_columns[COL_OFFSET:] = columns[:]
+        new_rid = self.table.page_directory.num_base_records
+        new_timestamp = int(datetime.now().current_datetime.timestamp())
 
         # add the record to table
-        self.table.add_record(columns, "Base")
+        # res1 = self.table.add_record(columns, "Base")
+        res1 = self.page_directory.insert_base_record(new_rid, new_timestamp, columns)
+        if res1 == None:
+            return False
 
         # create a index for the record
+        res2 = self.table.index.insert_value(columns, new_rid)
 
-        pass
+        return res2
 
     
     """
@@ -72,7 +73,7 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        self.select_version(search_key, search_key_index, projected_columns_index, 0)
+        return self.select_version(search_key, search_key_index, projected_columns_index, 0)
         
 
     
@@ -122,7 +123,53 @@ class Query:
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
     def update(self, primary_key, *columns):
-        pass
+
+        rid = self.table.index.locate(self.table.key, primary_key)
+
+        if rid == None:
+            return False
+        
+        base_indirection = self.table.page_directory.get_col_value(rid, INDIRECTION_COLUMN, 'Base')
+        base_schema = self.table.page_directory.get_col_value(rid, SCHEMA_ENCODING_COLUMN, 'Base')
+
+        # updated record columns
+        updated_columns = [0 for _ in range(columns)]
+        # indirection for the updated record
+        updated_indirection = base_indirection
+        # rid for the updated record
+        updated_rid = self.table.page_directory.num_tail_records
+        # timestamp for the updated record
+        updated_timestamp = int(datetime.now().current_datetime.timestamp())
+        # schema for the updated record
+        updated_schema = base_schema
+        for i in range(len(columns)):
+            if columns[i] != None:
+                updated_columns[i] = columns[i]
+                updated_schema = (updated_schema | (1 << i))
+
+        # if has another update record, head insert, replace the current record 
+        # if base_indirection != -1:
+        if base_indirection != 0:
+            cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))])[0]
+            for i in range(len(columns)):
+                # find the updated columns
+                if ((base_schema >> i) & 1):
+                    updated_columns[i] = cur_version_record.columns[i]
+        
+        # add the updated record to tail page
+        self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_columns)
+
+        # update the base page
+        base_page_idx = rid // PAGE_CAPACITY
+        base_record_idx = rid % PAGE_CAPACITY
+        self.table.page_directory.update_base_indirection(base_page_idx, base_record_idx, updated_rid)
+        self.table.page_directory.update_base_schema_encoding(base_page_idx, base_record_idx, updated_schema)
+        # do we need to update the timestamp for base page?
+
+        # update the index for the updated record
+        self.table.index.update_index(primary_key, columns[primary_key], updated_rid)
+
+        return True
 
     
     """
@@ -134,7 +181,7 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        pass
+        return self.sum_version(start_range, end_range, aggregate_column_index, 0)
 
     
     """
@@ -147,7 +194,25 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        pass
+        selected_rids = self.table.index.locate_range(start_range, end_range, self.table.key)
+
+        res = 0
+        for rid in selected_rids:
+            # get value from base page
+            value = self.table.get_col_value(rid, aggregate_column_index, 'Base')
+
+            # select version
+            updated_rid, updated_page_type = self.table.get_version_rid(rid, relative_version)
+
+            # has the updated record
+            if updated_page_type == "Tail":
+                updated_schema = self.table.get_col_value(updated_rid, SCHEMA_ENCODING_COLUMN, updated_page_type)
+                if ((updated_schema >> aggregate_column_index) & 1):
+                    value =  self.table.get_col_value(updated_rid, aggregate_column_index, updated_page_type)
+            
+            res += value
+        
+        return res
 
     
     """
