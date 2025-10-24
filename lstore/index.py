@@ -4,6 +4,12 @@ A data strucutre holding indices for various columns of a table. Key column shou
 
 from collections import OrderedDict
 
+INDIRECTION_COLUMN = 0
+RID_COLUMN = 1
+TIMESTAMP_COLUMN = 2
+SCHEMA_ENCODING_COLUMN = 3
+USER_COLUMN_START = 4
+
 # data structure used to store the index
 class OrderedDictList:
     def __init__(self):
@@ -41,7 +47,7 @@ class Index:
             res = self.indices[column][value]
             return res
         else:
-            ValueError('No such index existed')
+            return None
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -54,7 +60,7 @@ class Index:
         if self.indices[column]:
             return self.indices[column].value_in_range(begin, end)
         else:
-            ValueError('No such index existed')
+            return None
 
     """
     # optional: Create index on specific column
@@ -80,4 +86,23 @@ class Index:
     """
 
     def drop_index(self, column_number):
-        pass
+        self.indices[column_number] = None
+
+    def delete_value(self, primary_key):
+        rids = self.locate(self.table.key, primary_key)
+        
+        # primary ket only should have only one rid
+        if rids == None or len(rids) > 2:
+            return False
+        
+        self.indices[self.table.key][primary_key].pop(rids[0])
+        return True
+    
+    def insert_value(self, columns, rid):
+        for col_idx, col_value in enumerate(columns):
+            if self.indices[col_idx] != None:
+                self.indices[col_idx].add(col_value, rid)
+        return True
+    
+    def update_index(self, column_number, key, value):
+        self.indices[column_number].add(key, value)
