@@ -133,19 +133,22 @@ class Query:
         if selected_rids == None:
             return False
         
-        print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
+        # print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
         rid = selected_rids[0]
+
+        base_page_idx = rid // PAGE_CAPACITY
+        base_record_idx = rid % PAGE_CAPACITY
 
         # base_indirection = self.table.get_col_value(rid, INDIRECTION_COLUMN, 'Base')
         # base_schema = self.table.get_col_value(rid, SCHEMA_ENCODING_COLUMN, 'Base')
 
-        base_indirection = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['indirection']
-        base_schema = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['schema_encoding']
+        base_indirection = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['indirection']
+        base_schema = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['schema_encoding']
 
         # updated record columns
         # updated_columns = [0 for _ in range(len(columns))]
-        updated_columns = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['columns']
-        print(f"base_ind: {base_indirection}, base_schema: {base_schema}, init columns: {updated_columns}")
+        updated_columns = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['columns']
+        # print(f"base_ind: {base_indirection}, base_schema: {base_schema}, init columns: {updated_columns}")
 
         # indirection for the updated record
         updated_indirection = base_indirection
@@ -160,14 +163,14 @@ class Query:
                 updated_columns[i] = columns[i]
                 updated_schema = (updated_schema | (1 << i))
 
-        print("from input columns: ", updated_columns)
+        # print("from input columns: ", updated_columns)
 
         # if has another update record, head insert, replace the current record 
         # if base_indirection != -1:
         if base_indirection != 0:
             cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))])[0]
             
-            print("old record: ", cur_version_record.columns)
+            # print("old record: ", cur_version_record.columns)
             
             for i in range(len(columns)):
                 # find the updated columns
@@ -175,20 +178,20 @@ class Query:
                     # print("   updated col idx: ", i)
                     updated_columns[i] = cur_version_record.columns[i]
         
-        print("from existed tailed columns: ", updated_columns)
+        # print("from existed tailed columns: ", updated_columns)
 
         # add the updated record to tail page
         self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_columns)
 
         # update the base page
-        base_page_idx = rid // PAGE_CAPACITY
-        base_record_idx = rid % PAGE_CAPACITY
+        # base_page_idx = rid // PAGE_CAPACITY
+        # base_record_idx = rid % PAGE_CAPACITY
         self.table.page_directory.update_base_indirection(base_page_idx, base_record_idx, updated_rid)
         self.table.page_directory.update_base_schema_encoding(base_page_idx, base_record_idx, updated_schema)
         # do we need to update the timestamp for base page?
 
         # update the index for the updated record
-        print(f'call update: before update index, {primary_key}, {updated_columns[self.table.key]}, {updated_rid}, ')
+        # print(f'call update: before update index, {primary_key}, {updated_columns[self.table.key]}, {updated_rid}, ')
         # exist issue
         self.table.index.update_index(self.table.key, primary_key, updated_rid)
 
@@ -217,22 +220,37 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        selected_rids = self.table.index.locate_range(start_range, end_range, self.table.key)
+        
+        rids_list = self.table.index.locate_range(start_range, end_range, self.table.key)
+        selected_rids = [e[0] for e in rids_list]
 
+        # print(f"\n range: ({start_range}, {end_range}), sum func. selected_rids: {selected_rids}")
         res = 0
         for rid in selected_rids:
+            # page and record idx
+            page_idx = rid // PAGE_CAPACITY
+            record_idx = rid % PAGE_CAPACITY
+
             # get value from base page
-            value = self.table.get_col_value(rid, aggregate_column_index, 'Base')
+            # value = self.table.get_col_value(rid, aggregate_column_index, 'Base')
+            value = self.table.page_directory.read_base_record(page_idx, record_idx)['columns'][aggregate_column_index]
 
             # select version
             updated_rid, updated_page_type = self.table.get_version_rid(rid, relative_version)
 
+            # page and record idx for relative version
+            updated_page_idx = updated_rid // PAGE_CAPACITY
+            updated_record_idx = updated_rid % PAGE_CAPACITY
+
             # has the updated record
             if updated_page_type == "Tail":
-                updated_schema = self.table.get_col_value(updated_rid, SCHEMA_ENCODING_COLUMN, updated_page_type)
+                # updated_schema = self.table.get_col_value(updated_rid, SCHEMA_ENCODING_COLUMN, updated_page_type)
+                updated_schema = self.table.page_directory.read_tail_record(updated_page_idx, updated_record_idx)['schema_encoding']
+                
                 if ((updated_schema >> aggregate_column_index) & 1):
-                    value =  self.table.get_col_value(updated_rid, aggregate_column_index, updated_page_type)
-            
+                    # value =  self.table.get_col_value(updated_rid, aggregate_column_index, updated_page_type)
+                    value = self.table.page_directory.read_tail_record(updated_page_idx, updated_record_idx)['columns'][aggregate_column_index]
+
             res += value
         
         return res

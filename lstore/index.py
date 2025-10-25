@@ -20,7 +20,7 @@ class OrderedDictList:
             self.data[key] = []
         self.data[key].append(value)
 
-        print("After add index value: ", key, self.data[key])
+        # print("After add index value: ", key, self.data[key])
 
     def value_in_range(self, begin, end):
         res = []
@@ -66,7 +66,7 @@ class Index:
             ValueError('Invalid column index')
         
         if self.indices[column]:
-            return self.indices.data[column].value_in_range(begin, end)
+            return self.indices[column].value_in_range(begin, end)
         else:
             return None
 
