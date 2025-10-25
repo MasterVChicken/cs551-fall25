@@ -1,6 +1,6 @@
 from lstore.index import Index
 from time import time
-from page import *
+from lstore.page import *
 
 from datetime import datetime
 
@@ -183,7 +183,7 @@ class Table:
         indirection = record['indirection']
         
         version = 0
-        while version > relative_version and indirection != -1:
+        while version > relative_version and indirection != 0:
             rid = indirection
             page_idx = rid // PAGE_CAPACITY
             record_idx = rid % PAGE_CAPACITY
@@ -195,9 +195,9 @@ class Table:
         
         return rid, 'Tail'
 
-
+    # may exist issues, change to read_tail_record and read_base_record
     def get_col_value(self, rid, column_idx, page_type = 'Base'):
-        if column_idx > len(self.num_columns):
+        if column_idx > self.num_columns:
             raise ValueError("Invalid column idx")
         
         if page_type != 'Base' and page_type != 'Tail':
@@ -215,14 +215,13 @@ class Table:
 
     # return a column iteratively
     def col_iterator(self, column_idx, page_type = 'Base'):
-        if column_idx > len(self.num_columns):
+        if column_idx > self.num_columns:
             raise ValueError("Invalid column idx")
         
         if page_type != 'Base' and page_type != 'Tail':
             raise ValueError("invalid page type")
 
-        num_records = self.page_directory.num_base_records if page_type == 'Base' else self.page_directory.num_tail_records
-        
+        num_records = self.page_directory.num_base_records if page_type == 'Base' else self.page_directory.num_tail_records        
         for i in range(num_records):
             # get page index and local record index (in one page)
             page_idx = i // PAGE_CAPACITY
@@ -245,13 +244,13 @@ class Table:
 
         if(page_type == 'Base'):
             rid = self.page_directory.num_base_records
-            timestamp = int(datetime.now().current_datetime.timestamp())
+            timestamp = int(datetime.now().timestamp())
             # schema_encoding?
             res = self.page_directory.insert_base_record(rid, timestamp, columns)
 
         elif(page_type == 'Tail'):
             rid = self.page_directory.num_tail_records
-            timestamp = int(datetime.now().current_datetime.timestamp())
+            timestamp = int(datetime.now().timestamp())
             schema_encoding = '0'
             # indirection?
             res = self.page_directory.append_tail_record(rid, timestamp, schema_encoding, columns)

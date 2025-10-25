@@ -49,15 +49,16 @@ class Query:
         # # first 5 for rid, indirection, timestamp, schema, col start
 
         new_rid = self.table.page_directory.num_base_records
-        new_timestamp = int(datetime.now().current_datetime.timestamp())
+        new_timestamp = int(datetime.now().timestamp())
 
         # add the record to table
         # res1 = self.table.add_record(columns, "Base")
-        res1 = self.page_directory.insert_base_record(new_rid, new_timestamp, columns)
+        res1 = self.table.page_directory.insert_base_record(new_rid, new_timestamp, columns)
         if res1 == None:
             return False
 
-        # create a index for the record
+        # print(new_rid, columns)
+        
         res2 = self.table.index.insert_value(columns, new_rid)
 
         return res2
@@ -95,7 +96,8 @@ class Query:
             for col_idx, projected_value in enumerate(projected_columns_index):
                 # if projected_value is 1, get data of this column from base page
                 if projected_value:
-                    col_value = self.table.page_directory.get_col_value(rid, col_idx, 'Base')
+                    # col_value = self.table.get_col_value(rid, col_idx, 'Base')
+                    col_value = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['columns'][col_idx]
                     res_col.append(col_value)
                 # for 0 value, should we append None?
                 # else:
@@ -108,7 +110,8 @@ class Query:
                 # need to edit schema?
                 # schema = self.tabel.get_col_value(next_rid, SCHEMA_ENCODING_COLUMN, page_type)
                 for col_idx in range(len(projected_columns_index)):
-                    col_value = self.table.page_directory.get_col_value(next_rid, col_idx, page_type)
+                    # col_value = self.table.get_col_value(next_rid, col_idx, page_type)
+                    col_value = self.table.page_directory.read_tail_record(next_rid//PAGE_CAPACITY, next_rid%PAGE_CAPACITY)['columns'][col_idx]
                     res_col.append(col_value)
 
             record = Record(next_rid, self.table.key, res_col)
@@ -122,24 +125,34 @@ class Query:
     # Returns True if update is succesful
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
+    # issue exist
     def update(self, primary_key, *columns):
 
-        rid = self.table.index.locate(self.table.key, primary_key)
+        selected_rids = self.table.index.locate(self.table.key, primary_key)
 
-        if rid == None:
+        if selected_rids == None:
             return False
         
-        base_indirection = self.table.page_directory.get_col_value(rid, INDIRECTION_COLUMN, 'Base')
-        base_schema = self.table.page_directory.get_col_value(rid, SCHEMA_ENCODING_COLUMN, 'Base')
+        print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
+        rid = selected_rids[0]
+
+        # base_indirection = self.table.get_col_value(rid, INDIRECTION_COLUMN, 'Base')
+        # base_schema = self.table.get_col_value(rid, SCHEMA_ENCODING_COLUMN, 'Base')
+
+        base_indirection = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['indirection']
+        base_schema = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['schema_encoding']
 
         # updated record columns
-        updated_columns = [0 for _ in range(columns)]
+        # updated_columns = [0 for _ in range(len(columns))]
+        updated_columns = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['columns']
+        print(f"base_ind: {base_indirection}, base_schema: {base_schema}, init columns: {updated_columns}")
+
         # indirection for the updated record
         updated_indirection = base_indirection
         # rid for the updated record
         updated_rid = self.table.page_directory.num_tail_records
         # timestamp for the updated record
-        updated_timestamp = int(datetime.now().current_datetime.timestamp())
+        updated_timestamp = int(datetime.now().timestamp())
         # schema for the updated record
         updated_schema = base_schema
         for i in range(len(columns)):
@@ -147,15 +160,22 @@ class Query:
                 updated_columns[i] = columns[i]
                 updated_schema = (updated_schema | (1 << i))
 
+        print("from input columns: ", updated_columns)
+
         # if has another update record, head insert, replace the current record 
         # if base_indirection != -1:
         if base_indirection != 0:
             cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))])[0]
+            
+            print("old record: ", cur_version_record.columns)
+            
             for i in range(len(columns)):
                 # find the updated columns
                 if ((base_schema >> i) & 1):
                     updated_columns[i] = cur_version_record.columns[i]
         
+        print("from existed tailed columns: ", updated_columns)
+
         # add the updated record to tail page
         self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_columns)
 
@@ -167,7 +187,9 @@ class Query:
         # do we need to update the timestamp for base page?
 
         # update the index for the updated record
-        self.table.index.update_index(primary_key, columns[primary_key], updated_rid)
+        print(f'call update: before update index, {primary_key}, {updated_columns[self.table.key]}, {updated_rid}, ')
+        # exist issue
+        self.table.index.update_index(self.table.key, primary_key, updated_rid)
 
         return True
 
