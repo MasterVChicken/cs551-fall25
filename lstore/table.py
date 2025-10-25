@@ -91,7 +91,7 @@ class PageRange:
         
         base_page = self.base_pages[page_index]
         if record_index >= base_page.num_records:
-            print("read_base_record: ", page_index, record_index)
+            # print("read_base_record: ", page_index, record_index)
             return None
         
         # read every column independently
@@ -125,6 +125,30 @@ class PageRange:
                 for i in range(self.num_columns)
             ]
         }
+    
+    def set_base_record_value(self, page_index, record_index, column_idx, value):
+        if page_index >= len(self.base_pages):
+            return None
+        
+        base_page = self.base_pages[page_index]
+        if record_index >= base_page.num_records:
+            # print("read_base_record: ", page_index, record_index)
+            return None
+        
+        # set value based on column_idx
+        base_page.physical_pages[column_idx].write(value)
+
+    def set_tail_record_value(self, page_index, record_index, column_idx, value):
+        if page_index >= len(self.tail_pages):
+            return None
+        
+        tail_page = self.tail_pages[page_index]
+        if record_index >= tail_page.num_records:
+            return None
+        
+        # set value based on column_idx
+        tail_page.physical_pages[column_idx].write(value)
+
     
     def update_base_indirection(self, page_index, record_index, new_indirection):
         if page_index >= len(self.base_pages):
@@ -273,15 +297,20 @@ class Table:
     # TODO: use a dictionary to store all records or using page_directory?
     def get_record_by_rid(self, rid):
         pass
-
-    def delete(self):
-        pass
     
     # TODO: implement delete by rid
-    def delete_record_by_rid(self, rid):
-        # set rid to -1 (or other invalidate value) ?
-        # need a page range func to set value from column, write_base_record()
-        pass
+    def delete(self, primary_key):
+        # get rid list [base_rid, tail_rid1, tail_rid2, ...]
+        rids = self.indexlocate(self.key, primary_key)
+        for idx, rid in enumerate(rid):
+            # set rid to -1 (or other invalidate value) ?
+            page_idx = rid // PAGE_CAPACITY
+            record_idx = rid % PAGE_CAPACITY
+            if idx == 0:
+                self.page_directory.set_base_record_value(page_idx, record_idx, RID_COLUMN, -1)
+            else:
+                self.page_directory.set_tail_record_value(page_idx, record_idx, RID_COLUMN, -1)
+    
 
     # Is merge not required?
     def __merge(self):
