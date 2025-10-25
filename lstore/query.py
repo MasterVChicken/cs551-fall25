@@ -112,7 +112,7 @@ class Query:
                 for col_idx in range(len(projected_columns_index)):
                     # col_value = self.table.get_col_value(next_rid, col_idx, page_type)
                     col_value = self.table.page_directory.read_tail_record(next_rid//PAGE_CAPACITY, next_rid%PAGE_CAPACITY)['columns'][col_idx]
-                    res_col.append(col_value)
+                    res_col[col_idx] = col_value
 
             record = Record(next_rid, self.table.key, res_col)
             records_list.append(record)
@@ -172,6 +172,7 @@ class Query:
             for i in range(len(columns)):
                 # find the updated columns
                 if ((base_schema >> i) & 1):
+                    # print("   updated col idx: ", i)
                     updated_columns[i] = cur_version_record.columns[i]
         
         print("from existed tailed columns: ", updated_columns)
