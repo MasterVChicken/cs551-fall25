@@ -193,8 +193,13 @@ class Table:
             indirection = record['indirection']
 
             version -= 1
-        
-        return rid, 'Tail'
+
+        # find relative tail record
+        if version == relative_version:
+            return rid, 'Tail'
+        # relative version is base record
+        elif indirection == -1:
+            return rid, 'Base'
 
     # may exist issues, change to read_tail_record and read_base_record
     def get_col_value(self, rid, column_idx, page_type = 'Base'):
