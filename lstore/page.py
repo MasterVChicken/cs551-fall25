@@ -26,7 +26,8 @@ class Page:
 
         offset = self.num_records * 8
 
-        value_bytes = value.to_bytes(8, byteorder="little", signed=False)
+        # value_bytes = value.to_bytes(8, byteorder="little", signed=False)
+        value_bytes = value.to_bytes(8, byteorder="little", signed=True)
         self.data[offset : offset + 8] = value_bytes
 
         self.num_records += 1
@@ -36,17 +37,23 @@ class Page:
         if index < 0 or index >= self.num_records:
             return None
         offset = index * 8
+        # return int.from_bytes(
+        #     self.data[offset:offset + 8],
+        #     byteorder='little',
+        #     signed=False
+        # )
         return int.from_bytes(
             self.data[offset:offset + 8],
             byteorder='little',
-            signed=False
+            signed=True
         )
         
     def update(self, index, value):
         if index < 0 or index >= self.num_records:
             return False
         offset = index * 8
-        value_bytes = value.to_bytes(8, byteorder='little', signed=False)
+        # value_bytes = value.to_bytes(8, byteorder='little', signed=False)
+        value_bytes = value.to_bytes(8, byteorder='little', signed=True)
         self.data[offset:offset + 8] = value_bytes
         return True
         
@@ -76,7 +83,7 @@ class BasePage():
         if not self.has_capacity():
             return False
         
-        self.physical_pages[self.INDIRECTION_COLUMN].write(0)
+        self.physical_pages[self.INDIRECTION_COLUMN].write(-1)
         self.physical_pages[self.RID_COLUMN].write(rid)
         self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
         self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(0)
