@@ -100,7 +100,6 @@ class Query:
             for col_idx, projected_value in enumerate(projected_columns_index):
                 # if projected_value is 1, get data of this column from base page
                 if projected_value:
-                    # col_value = self.table.get_col_value(rid, col_idx, 'Base')
                     col_value = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['columns'][col_idx]
                     res_col.append(col_value)
                 # for 0 value, should we append None?
@@ -113,9 +112,7 @@ class Query:
 
             if page_type == 'Tail':
                 # need to edit schema?
-                # schema = self.tabel.get_col_value(next_rid, SCHEMA_ENCODING_COLUMN, page_type)
                 for col_idx in range(len(projected_columns_index)):
-                    # col_value = self.table.get_col_value(next_rid, col_idx, page_type)
                     col_value = self.table.page_directory.read_tail_record(next_rid//PAGE_CAPACITY, next_rid%PAGE_CAPACITY)['columns'][col_idx]
                     res_col[col_idx] = col_value
 
@@ -144,14 +141,10 @@ class Query:
         base_page_idx = rid // PAGE_CAPACITY
         base_record_idx = rid % PAGE_CAPACITY
 
-        # base_indirection = self.table.get_col_value(rid, INDIRECTION_COLUMN, 'Base')
-        # base_schema = self.table.get_col_value(rid, SCHEMA_ENCODING_COLUMN, 'Base')
-
         base_indirection = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['indirection']
         base_schema = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['schema_encoding']
 
         # updated record columns
-        # updated_columns = [0 for _ in range(len(columns))]
         updated_columns = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['columns']
         # print(f"base_ind: {base_indirection}, base_schema: {base_schema}, init columns: {updated_columns}")
 
@@ -189,15 +182,12 @@ class Query:
         self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_columns)
 
         # update the base page
-        # base_page_idx = rid // PAGE_CAPACITY
-        # base_record_idx = rid % PAGE_CAPACITY
         self.table.page_directory.update_base_indirection(base_page_idx, base_record_idx, updated_rid)
         self.table.page_directory.update_base_schema_encoding(base_page_idx, base_record_idx, updated_schema)
         # do we need to update the timestamp for base page?
 
         # update the index for the updated record
         # print(f'Before update index: primary_key_idx: {self.table.key}, primary_key_value: {primary_key}, updated_record_rid: {updated_rid}')
-        # exist issue
         self.table.index.update_index(self.table.key, primary_key, updated_rid)
 
         return True
@@ -237,7 +227,6 @@ class Query:
             record_idx = rid % PAGE_CAPACITY
 
             # get value from base page
-            # value = self.table.get_col_value(rid, aggregate_column_index, 'Base')
             value = self.table.page_directory.read_base_record(page_idx, record_idx)['columns'][aggregate_column_index]
 
             # select version
@@ -249,11 +238,9 @@ class Query:
 
             # has the updated record
             if updated_page_type == "Tail":
-                # updated_schema = self.table.get_col_value(updated_rid, SCHEMA_ENCODING_COLUMN, updated_page_type)
                 updated_schema = self.table.page_directory.read_tail_record(updated_page_idx, updated_record_idx)['schema_encoding']
                 
                 if ((updated_schema >> aggregate_column_index) & 1):
-                    # value =  self.table.get_col_value(updated_rid, aggregate_column_index, updated_page_type)
                     value = self.table.page_directory.read_tail_record(updated_page_idx, updated_record_idx)['columns'][aggregate_column_index]
 
             res += value

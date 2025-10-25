@@ -53,9 +53,6 @@ class Index:
             return res
         else:
             return None
-            # for rid, v in self.table.col_iterator(column):
-            #     if v == value:
-            #         yield rid
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
