@@ -91,6 +91,7 @@ class PageRange:
         
         base_page = self.base_pages[page_index]
         if record_index >= base_page.num_records:
+            print("read_base_record: ", page_index, record_index)
             return None
         
         # read every column independently
@@ -171,7 +172,7 @@ class Table:
         indirection = record['indirection']
 
         # not indirection
-        if indirection == 0:
+        if indirection == -1:
             return rid, 'Base'
         
         # 1st updated record
@@ -179,16 +180,16 @@ class Table:
         page_idx = rid // PAGE_CAPACITY
         record_idx = rid % PAGE_CAPACITY
 
-        record = self.page_directory.read_base_record(page_idx, record_idx)
+        record = self.page_directory.read_tail_record(page_idx, record_idx)
         indirection = record['indirection']
         
         version = 0
-        while version > relative_version and indirection != 0:
+        while version > relative_version and indirection != -1:
             rid = indirection
             page_idx = rid // PAGE_CAPACITY
             record_idx = rid % PAGE_CAPACITY
 
-            record = self.page_directory.read_base_record(page_idx, record_idx)
+            record = self.page_directory.read_tail_record(page_idx, record_idx)
             indirection = record['indirection']
 
             version -= 1

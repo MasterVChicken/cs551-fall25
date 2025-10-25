@@ -90,6 +90,10 @@ class Query:
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
         selected_rids = self.table.index.locate(search_key_index, search_key)
+        
+        selected_rids = [selected_rids[0]]
+        # print(f"Select version: search_key_index: {search_key_index}, search_key: {search_key}, selected_rids: {selected_rids}")
+
         records_list = []
         for rid in selected_rids:
             res_col = []
@@ -104,6 +108,7 @@ class Query:
                 #     res_col.appned()
 
             # get data matched the relative version from base value
+            # print("get_version: ", rid)
             next_rid, page_type = self.table.get_version_rid(rid, relative_version)
 
             if page_type == 'Tail':
@@ -166,8 +171,8 @@ class Query:
         # print("from input columns: ", updated_columns)
 
         # if has another update record, head insert, replace the current record 
-        # if base_indirection != -1:
-        if base_indirection != 0:
+        if base_indirection != -1:
+        # if base_indirection != 0:
             cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))])[0]
             
             # print("old record: ", cur_version_record.columns)
@@ -191,7 +196,7 @@ class Query:
         # do we need to update the timestamp for base page?
 
         # update the index for the updated record
-        # print(f'call update: before update index, {primary_key}, {updated_columns[self.table.key]}, {updated_rid}, ')
+        # print(f'Before update index: primary_key_idx: {self.table.key}, primary_key_value: {primary_key}, updated_record_rid: {updated_rid}')
         # exist issue
         self.table.index.update_index(self.table.key, primary_key, updated_rid)
 
