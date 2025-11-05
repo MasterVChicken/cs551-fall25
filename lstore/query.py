@@ -154,14 +154,14 @@ class Query:
         updated_rid = self.table.page_directory.num_tail_records
         # timestamp for the updated record
         updated_timestamp = int(datetime.now().timestamp())
-        # schema for the updated record
-        updated_schema = base_schema
-        for i in range(len(columns)):
-            if columns[i] != None:
-                updated_columns[i] = columns[i]
-                updated_schema = (updated_schema | (1 << i))
+        # # schema for the updated record
+        # updated_schema = base_schema
+        # for i in range(len(columns)):
+        #     if columns[i] != None:
+        #         updated_columns[i] = columns[i]
+        #         updated_schema = (updated_schema | (1 << i))
 
-        # print("from input columns: ", updated_columns)
+        # # print("from input columns: ", updated_columns)
 
         # if has another update record, head insert, replace the current record 
         if base_indirection != -1:
@@ -177,6 +177,15 @@ class Query:
                     updated_columns[i] = cur_version_record.columns[i]
         
         # print("from existed tailed columns: ", updated_columns)
+
+        # schema for the updated record
+        updated_schema = base_schema
+        for i in range(len(columns)):
+            if columns[i] != None:
+                updated_columns[i] = columns[i]
+                updated_schema = (updated_schema | (1 << i))
+
+        # print("from input columns: ", updated_columns)
 
         # add the updated record to tail page
         self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_columns)
