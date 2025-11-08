@@ -6,9 +6,10 @@ INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
-USER_COLUMN_START = 4
+BASE_RID = 4
+USER_COLUMN_START = 5
 
-COL_OFFSET = 5
+# COL_OFFSET = 5
 
 PAGE_CAPACITY = 4096 // 8
 
@@ -152,6 +153,7 @@ class Query:
 
         base_indirection = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['indirection']
         base_schema = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['schema_encoding']
+        base_rid = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['base_rid']
 
         # updated record columns
         updated_columns = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['columns']
@@ -163,6 +165,8 @@ class Query:
         updated_rid = self.table.page_directory.num_tail_records
         # timestamp for the updated record
         updated_timestamp = int(datetime.now().timestamp())
+        # updated base rid
+        updated_base_rid = base_rid
         # # schema for the updated record
         # updated_schema = base_schema
         # for i in range(len(columns)):
@@ -197,7 +201,7 @@ class Query:
         # print("from input columns: ", updated_columns)
 
         # add the updated record to tail page
-        self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_columns)
+        self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_base_rid, updated_columns)
 
         # update the base page
         self.table.page_directory.update_base_indirection(base_page_idx, base_record_idx, updated_rid)

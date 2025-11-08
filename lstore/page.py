@@ -71,7 +71,10 @@ class BasePage():
         self.RID_COLUMN = 1
         self.TIMESTAMP_COLUMN = 2
         self.SCHEMA_ENCODING_COLUMN = 3
-        self.USER_COLUMN_START = 4
+        # self.USER_COLUMN_START = 4
+
+        self.BASE_RID = 4
+        self.USER_COLUMN_START = 5
         
         self.physical_pages = [Page() for _ in range(self.USER_COLUMN_START + num_columns)]
         self.num_records = 0
@@ -87,6 +90,8 @@ class BasePage():
         self.physical_pages[self.RID_COLUMN].write(rid)
         self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
         self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(0)
+
+        self.physical_pages[self.BASE_RID].write(-1)
         
         for i, value in enumerate(columns):
             self.physical_pages[self.USER_COLUMN_START + i].write(value)
@@ -108,7 +113,11 @@ class TailPage():
         self.RID_COLUMN = 1
         self.TIMESTAMP_COLUMN = 2
         self.SCHEMA_ENCODING_COLUMN = 3
-        self.USER_COLUMN_START = 4
+        # self.USER_COLUMN_START = 4
+
+        self.BASE_RID = 4
+        self.USER_COLUMN_START = 5
+
         
         self.physical_pages = [Page() for _ in range(self.USER_COLUMN_START + num_columns)]
         self.num_records = 0
@@ -116,7 +125,7 @@ class TailPage():
     def has_capacity(self):
         return self.physical_pages[0].has_capacity()
     
-    def append_update(self, rid, indirection, timestamp, schema_encoding, columns):
+    def append_update(self, rid, indirection, timestamp, schema_encoding, base_rid, columns):
         if not self.has_capacity():
             return False
         
@@ -124,6 +133,7 @@ class TailPage():
         self.physical_pages[self.RID_COLUMN].write(rid)
         self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
         self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(schema_encoding)
+        self.physical_pages[self.BASE_RID].write(base_rid)
         
         for i, value in enumerate(columns):
             actual_value = value if value is not None else 0

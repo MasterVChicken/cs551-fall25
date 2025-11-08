@@ -4,10 +4,13 @@ from lstore.page import *
 
 from datetime import datetime
 
+import math
+
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
+BASE_RID = 4
 
 PAGE_CAPACITY = 4096 // 8
 
@@ -71,12 +74,12 @@ class PageRange:
         return None
     
     # Some specical prpcess here I think?
-    def append_tail_record(self, rid, indirection, timestamp, schema_encoding, columns):
+    def append_tail_record(self, rid, indirection, timestamp, schema_encoding, base_rid, columns):
         if not self.has_tail_capacity():
             self._allocate_tail_page()
         
         success = self.current_tail_page.append_update(
-            rid, indirection, timestamp, schema_encoding, columns
+            rid, indirection, timestamp, schema_encoding, base_rid, columns
         )
         if success:
             page_index = len(self.tail_pages) - 1
@@ -100,6 +103,7 @@ class PageRange:
             'rid': base_page.physical_pages[RID_COLUMN].read(record_index),
             'timestamp': base_page.physical_pages[TIMESTAMP_COLUMN].read(record_index),
             'schema_encoding': base_page.physical_pages[SCHEMA_ENCODING_COLUMN].read(record_index),
+            'base_rid': base_page.physical_pages[BASE_RID].read(record_index),
             'columns': [
                 base_page.physical_pages[base_page.USER_COLUMN_START + i].read(record_index)
                 for i in range(self.num_columns)
@@ -120,6 +124,7 @@ class PageRange:
             'rid': tail_page.physical_pages[RID_COLUMN].read(record_index),
             'timestamp': tail_page.physical_pages[TIMESTAMP_COLUMN].read(record_index),
             'schema_encoding': tail_page.physical_pages[SCHEMA_ENCODING_COLUMN].read(record_index),
+            'base_rid': tail_page.physical_pages[BASE_RID].read(record_index),
             'columns': [
                 tail_page.physical_pages[tail_page.USER_COLUMN_START + i].read(record_index)
                 for i in range(self.num_columns)
@@ -314,5 +319,13 @@ class Table:
 
     # Is merge not required?
     def __merge(self):
-        print("merge is happening")
+        # # print("merge is happening")
+        # # suppose we merge first 3 tail pages once merge.
+        # merge_tail_page_indices = [0, 1, 2]
+        # for tail_page_idx in merge_tail_page_indices:
+        #     num_tail_pages = math.ceil(self.page_directory.num_tail_records / PAGE_CAPACITY)
+        #     # check tail_page_idx not out of range
+        #     if(tail_page_idx >= num_tail_pages):
+        #         return False
+
         pass

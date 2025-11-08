@@ -8,7 +8,8 @@ INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
-USER_COLUMN_START = 4
+BASE_RID = 4
+USER_COLUMN_START = 5
 
 # data structure used to store the index
 class OrderedDictList:
