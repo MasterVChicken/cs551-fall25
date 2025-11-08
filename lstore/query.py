@@ -59,7 +59,7 @@ class Query:
 
         # print(new_rid, columns)
         
-        res2 = self.table.index.insert_value(columns, new_rid)
+        res2 = self.table.index.insert_value(columns, new_rid, "Base")
 
         return res2
 
@@ -89,9 +89,13 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        selected_rids = self.table.index.locate(search_key_index, search_key)
+        # selected_rids = self.table.index.locate(search_key_index, search_key)
+        rids_list = self.table.index.locate(search_key_index, search_key)
+        # tmp_rid = [e[0] for e in rids_list]
+        # selected_rids = [x for row in tmp_rid for x in row]
+        selected_rids = rids_list[0]
         
-        selected_rids = [selected_rids[0]]
+        # selected_rids = [selected_rids[0]]
         # print(f"Select version: search_key_index: {search_key_index}, search_key: {search_key}, selected_rids: {selected_rids}")
 
         records_list = []
@@ -130,7 +134,12 @@ class Query:
     # issue exist
     def update(self, primary_key, *columns):
 
-        selected_rids = self.table.index.locate(self.table.key, primary_key)
+        # selected_rids = self.table.index.locate(self.table.key, primary_key)
+       
+        rids_list = self.table.index.locate(self.table.key, primary_key)
+        # tmp_rid = [e[0] for e in rids_list]
+        # selected_rids = [x for row in tmp_rid for x in row]
+        selected_rids = rids_list[0]
 
         if selected_rids == None:
             return False
@@ -197,7 +206,7 @@ class Query:
 
         # update the index for the updated record
         # print(f'Before update index: primary_key_idx: {self.table.key}, primary_key_value: {primary_key}, updated_record_rid: {updated_rid}')
-        self.table.index.update_index(self.table.key, primary_key, updated_rid)
+        self.table.index.update_index(self.table.key, primary_key, updated_rid, "Tail")
 
         return True
 
@@ -226,7 +235,9 @@ class Query:
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
         
         rids_list = self.table.index.locate_range(start_range, end_range, self.table.key)
-        selected_rids = [e[0] for e in rids_list]
+        tmp_rid = [e[0] for e in rids_list]
+        # selected_rids = [e[0] for e in rids_list]
+        selected_rids = [x for row in tmp_rid for x in row]
 
         # print(f"\n range: ({start_range}, {end_range}), sum func. selected_rids: {selected_rids}")
         res = 0

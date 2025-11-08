@@ -15,10 +15,17 @@ class OrderedDictList:
     def __init__(self):
          self.data = OrderedDict()
     
-    def add(self, key, value):
+    def add(self, key, value, page_type):
         if key not in self.data:
-            self.data[key] = []
-        self.data[key].append(value)
+            # self.data[key] = []
+            self.data[key] = [[],[]]
+        
+        if(page_type == 'Base'):
+            self.data[key][0].append(value)
+        elif(page_type == 'Tail'):
+            self.data[key][1].append(value)
+        else:
+            return False
 
         # print("After add index value: ", key, self.data[key])
 
@@ -36,7 +43,7 @@ class Index:
         self.indices = [None] *  table.num_columns
         self.table = table
 
-        self.create_index(self.table.key)
+        self.create_index(self.table.key, "Base")
         pass
         
     """
@@ -71,7 +78,7 @@ class Index:
     # optional: Create index on specific column
     """
 
-    def create_index(self, column_number):
+    def create_index(self, column_number, page_tye):
         # print("creat index begin")
         if self.indices[column_number]:
             raise ValueError(f"Key {column_number} already has a index")
@@ -86,7 +93,7 @@ class Index:
         
         # insert rid and value into dict
         for rid, value in res:
-            self.indices[column_number].add(value, rid)
+            self.indices[column_number].add(value, rid, page_tye)
         
         # print("creat index begin end")
         # print(self.indices)
@@ -108,12 +115,12 @@ class Index:
         self.indices[self.table.key].data[primary_key].pop(rids[0])
         return True
     
-    def insert_value(self, columns, rid):
+    def insert_value(self, columns, rid, page_tye):
         for col_idx, col_value in enumerate(columns):
             if self.indices[col_idx] != None:
                 # print(col_idx, col_value, rid)
-                self.indices[col_idx].add(col_value, rid)
+                self.indices[col_idx].add(col_value, rid, page_tye)
         return True
     
-    def update_index(self, column_number, key, value):
-        self.indices[column_number].add(key, value)
+    def update_index(self, column_number, key, value, page_tye):
+        self.indices[column_number].add(key, value, page_tye)
