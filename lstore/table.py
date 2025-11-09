@@ -329,3 +329,24 @@ class Table:
         #         return False
 
         pass
+        
+    # more methods coupled with saving DB
+    # ---------- persistence helpers ----------
+    def save(self, filepath):
+        """
+        Save the whole table object to disk.
+        For this project it's fine to pickle the table.
+        """
+        with open(filepath, "wb") as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def load(filepath):
+        """
+        Load a table object from disk.
+        """
+        with open(filepath, "rb") as f:
+            table = pickle.load(f)
+        return table
+
+
