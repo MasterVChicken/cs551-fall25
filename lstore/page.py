@@ -73,7 +73,7 @@ class BasePage():
         self.SCHEMA_ENCODING_COLUMN = 3
         # self.USER_COLUMN_START = 4
 
-        self.BASE_RID = 4
+        self.BASE_RID_COLUMN = 4
         self.USER_COLUMN_START = 5
         
         self.physical_pages = [Page() for _ in range(self.USER_COLUMN_START + num_columns)]
@@ -91,7 +91,7 @@ class BasePage():
         self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
         self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(0)
 
-        self.physical_pages[self.BASE_RID].write(-1)
+        self.physical_pages[self.BASE_RID_COLUMN].write(-1)
         
         for i, value in enumerate(columns):
             self.physical_pages[self.USER_COLUMN_START + i].write(value)
@@ -115,7 +115,7 @@ class TailPage():
         self.SCHEMA_ENCODING_COLUMN = 3
         # self.USER_COLUMN_START = 4
 
-        self.BASE_RID = 4
+        self.BASE_RID_COLUMN = 4
         self.USER_COLUMN_START = 5
 
         
@@ -133,7 +133,7 @@ class TailPage():
         self.physical_pages[self.RID_COLUMN].write(rid)
         self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
         self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(schema_encoding)
-        self.physical_pages[self.BASE_RID].write(base_rid)
+        self.physical_pages[self.BASE_RID_COLUMN].write(base_rid)
         
         for i, value in enumerate(columns):
             actual_value = value if value is not None else 0

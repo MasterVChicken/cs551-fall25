@@ -5,12 +5,13 @@ from lstore.page import *
 from datetime import datetime
 
 import math
+import copy
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
-BASE_RID = 4
+BASE_RID_COLUMN = 4
 
 PAGE_CAPACITY = 4096 // 8
 
@@ -103,7 +104,7 @@ class PageRange:
             'rid': base_page.physical_pages[RID_COLUMN].read(record_index),
             'timestamp': base_page.physical_pages[TIMESTAMP_COLUMN].read(record_index),
             'schema_encoding': base_page.physical_pages[SCHEMA_ENCODING_COLUMN].read(record_index),
-            'base_rid': base_page.physical_pages[BASE_RID].read(record_index),
+            'base_rid': base_page.physical_pages[BASE_RID_COLUMN].read(record_index),
             'columns': [
                 base_page.physical_pages[base_page.USER_COLUMN_START + i].read(record_index)
                 for i in range(self.num_columns)
@@ -124,7 +125,7 @@ class PageRange:
             'rid': tail_page.physical_pages[RID_COLUMN].read(record_index),
             'timestamp': tail_page.physical_pages[TIMESTAMP_COLUMN].read(record_index),
             'schema_encoding': tail_page.physical_pages[SCHEMA_ENCODING_COLUMN].read(record_index),
-            'base_rid': tail_page.physical_pages[BASE_RID].read(record_index),
+            'base_rid': tail_page.physical_pages[BASE_RID_COLUMN].read(record_index),
             'columns': [
                 tail_page.physical_pages[tail_page.USER_COLUMN_START + i].read(record_index)
                 for i in range(self.num_columns)
@@ -317,18 +318,60 @@ class Table:
                 self.page_directory.set_tail_record_value(page_idx, record_idx, RID_COLUMN, -1)
     
 
-    # Is merge not required?
+        # Is merge not required?
     def __merge(self):
-        # # print("merge is happening")
-        # # suppose we merge first 3 tail pages once merge.
-        # merge_tail_page_indices = [0, 1, 2]
-        # for tail_page_idx in merge_tail_page_indices:
-        #     num_tail_pages = math.ceil(self.page_directory.num_tail_records / PAGE_CAPACITY)
-        #     # check tail_page_idx not out of range
-        #     if(tail_page_idx >= num_tail_pages):
-        #         return False
+        # print("merge is happening")
+        # suppose we merge first 2 tail pages once merge.
+        merge_tail_page_indices = [0, 1]
+        
+        for tail_page_idx in merge_tail_page_indices:
+            num_tail_pages = math.ceil(self.page_directory.num_tail_records / PAGE_CAPACITY)
+            # check tail_page_idx not out of range
+            if(tail_page_idx >= num_tail_pages):
+                return False
 
-        pass
+            # base rids for all current tail pages
+            tail_page_base_rids = self.page_directory.get_tail_page(tail_page_idx, BASE_RID_COLUMN)
+            tail_page_schema = self.page_directory.get_tail_page(tail_page_idx, SCHEMA_ENCODING_COLUMN)
+            tail_page_rid = self.page_directory.get_tail_page(tail_page_idx, RID_COLUMN)
+            
+            base_page_copies = [{} for _ in range(self.num_columns)]
+
+            # for each column
+            for col_idx in range(self.num_columns):
+                # get the tail page for this column
+                tail_page = self.page_directory.get_tail_page(tail_page_idx, col_idx)
+
+                updated = []
+                # from the last updated tail record
+                for rec_idx in range((tail_page.num_records - 1), -1, -1):
+                    column_value = tail_page.read(rec_idx)
+                    base_rid = tail_page_base_rids.read(rec_idx)
+                    # find the corresponding base page
+                    base_page_idx = base_rid // PAGE_CAPACITY
+
+                    if base_page_idx not in base_page_copies[col_idx]:
+                        base_page = copy.deepcopy(self.page_directory.get_base_page(base_page_idx, col_idx))
+                        base_page_copies[col_idx][base_page_idx] = base_page
+                    
+                    # base record has not been updated
+                    if base_rid not in updated:
+                        updated.append(base_rid)
+                        if (tail_page_schema.read(rec_idx) >> col_idx) & 1:
+                            base_page_copies[col_idx][base_page_idx].write(column_value)
+                    
+                    # get the tsp of current base page
+                    base_record_idx = base_rid % PAGE_CAPACITY
+                    tsp = self.page_directory.read_base_record(base_page_idx, base_record_idx)[BASE_RID_COLUMN]
+                    tid = tail_page_rid.read(rec_idx)
+                    # update current tsp for the base record
+                    if tid > tsp:
+                        self.page_directory.update_base_tsp(base_page_idx, base_record_idx, tid)
+
+            # overwrite the original base page with the updated copied base page
+            for col_idx in range(len(base_page_copies)):
+                for page_idx in base_page_copies[col_idx].keys():
+                    self.page_directory.base_pages[page_idx] = base_page_copies[col_idx][page_idx]
         
     # more methods coupled with saving DB
     # ---------- persistence helpers ----------
