@@ -52,3 +52,112 @@ class Database():
             raise ValueError(f"No table named: {name} found!")
         
         return self.tables[name]
+
+
+"""
+One possible implementation
+
+"""
+
+import os
+import json
+import pickle
+from lstore.table import Table
+
+
+class Database():
+
+    def __init__(self):
+        self.tables = {}
+        self.path = None
+
+    def _meta_path(self):
+        return os.path.join(self.path, "db_meta.json")
+
+    def open(self, path):
+        """
+        Open or create a database at `path`.
+        Load db metadata and each table file.
+        """
+        self.path = path
+        os.makedirs(self.path, exist_ok=True)
+
+        meta_file = self._meta_path()
+        if not os.path.exists(meta_file):
+            # first time: nothing to load
+            self.tables = {}
+            return
+
+        # load metadata
+        with open(meta_file, "r") as f:
+            meta = json.load(f)
+
+        self.tables = {}
+        for table_name, info in meta.get("tables", {}).items():
+            num_columns = info["num_columns"]
+            key_index = info["key_index"]
+
+            table_file = os.path.join(self.path, f"{table_name}.tbl")
+            if os.path.exists(table_file):
+                # let table load its internal pages
+                table = Table.load(table_file)
+            else:
+                # fallback: create empty table with same schema
+                table = Table(table_name, num_columns, key_index)
+
+            self.tables[table_name] = table
+
+    def close(self):
+        """
+        Save all tables + metadata.
+        """
+        if not self.path:
+            return
+
+        # 1) save each table as a separate file
+        for name, table in self.tables.items():
+            table_file = os.path.join(self.path, f"{name}.tbl")
+            table.save(table_file)
+
+        # 2) write db_meta.json
+        meta = {"tables": {}}
+        for name, table in self.tables.items():
+            meta["tables"][name] = {
+                "num_columns": table.num_columns,
+                "key_index": table.key
+            }
+
+        with open(self._meta_path(), "w") as f:
+            json.dump(meta, f, indent=2)
+
+    def create_table(self, name, num_columns, key_index):
+        if name in self.tables:
+            raise ValueError(f"Table {name} is already existed.")
+
+        table = Table(name, num_columns, key_index)
+        self.tables[name] = table
+
+        # persist right away
+        if self.path:
+            self.close()
+
+        return table
+
+    def drop_table(self, name):
+        if name not in self.tables:
+            raise ValueError(f"No table named: {name} found!")
+        del self.tables[name]
+
+        # delete the table file too
+        if self.path:
+            table_file = os.path.join(self.path, f"{name}.tbl")
+            if os.path.exists(table_file):
+                os.remove(table_file)
+            self.close()
+
+    def get_table(self, name):
+        if name not in self.tables:
+            raise ValueError(f"No table named: {name} found!")
+        return self.tables[name]
+
+
