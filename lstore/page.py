@@ -26,7 +26,7 @@ class Page:
         if not self.has_capacity():
             return False
 
-        offset = self.num_recnum_itemsords * 8
+        offset = self.num_items * 8
 
         value_bytes = value.to_bytes(8, byteorder="little", signed=True)
         self.data[offset : offset + 8] = value_bytes
@@ -113,8 +113,9 @@ class BasePage():
         
         self.physical_pages[column_index].set_data(data, num_records)
         # Align num of records with the first column
-        if column_index == 0:
-            self.num_records = num_records
+        # if column_index == 0:
+        #   self.num_records = num_records
+        self.num_records = num_records
         return True
     
     
@@ -172,8 +173,9 @@ class TailPage():
         
         self.physical_pages[column_index].set_data(data, num_records)
         # Align num of records with the first column
-        if column_index == 0:
-            self.num_records = num_records
+        # if column_index == 0:
+            # self.num_records = num_records
+        self.num_records = num_records
         return True
     
     # # Maybe we should define read()

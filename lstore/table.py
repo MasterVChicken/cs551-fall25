@@ -6,12 +6,15 @@ from datetime import datetime
 
 import math
 import copy
+import os
+import struct
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
 BASE_RID_COLUMN = 4
+USER_COLUMN_START = 5
 
 PAGE_CAPACITY = 4096 // 8
 
@@ -26,7 +29,9 @@ class Record:
 # "These invalidated records will be removed during the next merge cycle for the corresponding page range."
 class PageRange:
     # Manage a set of base pages and tail pages
-    def __init__(self, range_id, num_columns):
+    def __init__(self, table_path, range_id, num_columns, num_base_records = 0, num_tail_records = 0):
+        self.table_path = table_path
+
         self.range_id = range_id
         self.num_columns = num_columns
         
@@ -36,12 +41,28 @@ class PageRange:
         self.current_base_page = None
         self.current_tail_page = None
         
-        self.num_base_records = 0
-        self.num_tail_records = 0
+        # self.num_base_records = 0
+        # self.num_tail_records = 0
+        self.num_base_records = num_base_records
+        self.num_tail_records = num_tail_records
         
         # Initialize 1st base page and tail page
-        self._allocate_base_page()
-        self._allocate_tail_page()
+        # self._allocate_base_page()
+        # self._allocate_tail_page()
+        if(self.num_base_records == 0):
+            self._allocate_base_page()
+        if(self.num_tail_records == 0):
+            self._allocate_tail_page()
+        
+        if(self.num_base_records != 0 or self.num_tail_records != 0):
+            num_base_pages = (self.num_base_records // PAGE_CAPACITY) + 1
+            num_tail_pages = (self.num_tail_records // PAGE_CAPACITY) + 1
+
+            # print(f"num_base_records: {num_base_records}, num_base_pages: {num_base_pages}, num_tail_pages: {num_tail_pages}, num_tail_records {num_tail_records}")
+            
+            self.load_from_disk(num_base_pages, num_tail_pages)
+            if(self.num_base_records != 0): self.current_base_page = self.base_pages[-1]
+            if(self.num_tail_records != 0): self.current_tail_page = self.base_pages[-1]
     
     def _allocate_base_page(self):
         new_page = BasePage(self.num_columns)
@@ -95,7 +116,7 @@ class PageRange:
         
         base_page = self.base_pages[page_index]
         if record_index >= base_page.num_records:
-            # print("read_base_record: ", page_index, record_index)
+            # print("read_base_record: ", page_index, record_index, base_page.num_records)
             return None
         
         # read every column independently
@@ -169,8 +190,73 @@ class PageRange:
         
         base_page = self.base_pages[page_index]
         return base_page.physical_pages[SCHEMA_ENCODING_COLUMN].update(record_index, new_encoding)
+    
+    def save_to_disk(self):
+        # save all base pages
+        for idx, base_page in enumerate(self.base_pages):
+            for column_idx in range(self.num_columns + USER_COLUMN_START):
+                page_data = base_page.get_page_data(column_idx)
+                # if idx == 0 and column_idx == 1: print(list(page_data))
+                
+                page_path = os.path.join(self.table_path, str(column_idx))
+                page_path = os.path.join(page_path, "Base")
 
+                if not os.path.exists(page_path):
+                    os.makedirs(page_path)
 
+                # for record_byte in page_data:
+                file_path = os.path.join(page_path, str(idx))
+                with open(file_path, "wb") as fp:
+                    fp.write(page_data)
+
+        # save all tail pages
+        for idx, tail_page in enumerate(self.tail_pages):
+            for column_idx in range(self.num_columns + USER_COLUMN_START):
+                page_data = tail_page.get_page_data(column_idx)
+                
+                page_path = os.path.join(self.table_path, str(column_idx))
+                page_path = os.path.join(page_path, "Tail")
+
+                if not os.path.exists(page_path):
+                    os.makedirs(page_path)
+
+                # for record_byte in page_data:
+                file_path = os.path.join(page_path, str(idx))
+                with open(file_path, "wb") as fp:
+                    fp.write(page_data)
+
+    def load_from_disk(self, num_base_pages, num_tail_pages):
+        # load all base records
+        for idx in range(num_base_pages):
+            # print(idx)
+            base_page = BasePage(self.num_columns)
+            for column_idx in range(self.num_columns + USER_COLUMN_START):
+                file_path = f"{self.table_path}/{column_idx}/Base/{idx}"
+                with open(file_path, "rb") as fp:
+                    page_data = fp.read()
+                
+                # if idx == 0 and column_idx == 1: print(list(page_data))
+                base_page.set_page_data(column_idx, page_data, len(page_data)//8)
+
+                # print(len(page_data)//8, base_page.num_records)
+
+            self.base_pages.append(base_page)
+        # self.current_base_page = self.base_pages[-1]
+
+        # load all tail records
+        for idx in range(num_tail_pages):
+            tail_page = TailPage(self.num_columns)
+            for column_idx in range(self.num_columns + USER_COLUMN_START):
+                
+
+                file_path = f"{self.table_path}/{column_idx}/Tail/{idx}"
+                with open(file_path, "rb") as fp:
+                    page_data = fp.read()
+                
+                tail_page.set_page_data(column_idx, page_data, len(page_data)//8)
+            self.tail_pages.append(tail_page)
+
+        # self.current_tail_page = self.tail_pages[-1]            
 
 class Table:
 
@@ -179,12 +265,13 @@ class Table:
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
-    def __init__(self, name, num_columns, key):
+    def __init__(self, name, dp_path, num_columns, key, num_base_records = 0, num_tail_records = 0):
         self.name = name
         self.key = key  # Which column is primary key?
         self.num_columns = num_columns
         # self.page_directory = {}
-        self.page_directory = PageRange(0, num_columns) # set range_id to 0
+        self.table_path = os.path.join(dp_path, name)
+        self.page_directory = PageRange(self.table_path, 0, num_columns, num_base_records, num_tail_records) # set range_id to 0
         self.index = Index(self)
         
         # ***** new added
@@ -269,6 +356,8 @@ class Table:
                 res = self.page_directory.read_tail_record(page_idx, record_index)
             col_value = res['columns'][column_idx]
             rid = res['rid']
+
+            # print(res)
 
             # return rid, col_value Iteratively
             yield rid, col_value
@@ -380,16 +469,27 @@ class Table:
         Save the whole table object to disk.
         For this project it's fine to pickle the table.
         """
-        with open(filepath, "wb") as f:
-            pickle.dump(self, f)
+        # with open(filepath, "wb") as f:
+        #     pickle.dump(self, f)
 
     @staticmethod
     def load(filepath):
         """
         Load a table object from disk.
         """
-        with open(filepath, "rb") as f:
-            table = pickle.load(f)
-        return table
+        # with open(filepath, "rb") as f:
+        #     table = pickle.load(f)
+        # return table
 
+    # close function for Table class
+    def close(self):
+        # meta_data_path = os.path.join(self.table_path, 'meta_data')
+        # with open(meta_data_path, "wb") as fp:
+        #     fp.write(struct.pack('<i', self.num_columns))
+        #     fp.write(struct.pack('<i', self.key))
+        #     fp.write(struct.pack('<i', self.page_directory.num_base_records))
+        #     fp.write(struct.pack('<i', self.page_directory.num_tail_records))
 
+        # save all records
+        self.page_directory.save_to_disk()
+        pass

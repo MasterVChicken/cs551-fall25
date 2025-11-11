@@ -95,6 +95,14 @@ class Index:
         # insert rid and value into dict
         for rid, value in res:
             self.indices[column_number].add(value, rid, page_tye)
+
+        # insert tail rid and tail value into dict 
+        if(self.table.page_directory.num_tail_records != 0):
+            res = list(self.table.col_iterator(column_number, "Tail"))
+            res.sort(key = lambda res: res[0])
+
+            for rid, value in res:
+                self.indices[column_number].add(value, rid, "Tail")
         
         # print("creat index begin end")
         # print(self.indices)
