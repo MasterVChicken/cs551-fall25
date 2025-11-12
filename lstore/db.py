@@ -1,4 +1,4 @@
-from lstore.table import Table
+# from lstore.table import Table
 
 # class Database():
 
@@ -64,7 +64,7 @@ import json
 import pickle
 import struct
 from lstore.table import Table
-
+from lstore.config import Config
 
 class Database():
 

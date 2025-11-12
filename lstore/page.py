@@ -1,4 +1,6 @@
 # BasePage is only a container in physical view
+from lstore.config import Config
+
 class Page:
     # Page has a fixed size of 4096 bytes
     # All columns are 64-bit integers
@@ -10,7 +12,8 @@ class Page:
         self.data = bytearray(4096)
         # I want to add header during storage
         # Considering set the first 8 bytes as header within the file
-        self.max_items = 4096 // 8
+        # self.max_items = 4096 // 8
+        self.max_items = Config.PAGE_CAPACITY
 
     def has_capacity(self):
         return self.num_items < self.max_items
@@ -69,16 +72,16 @@ class BasePage():
     def __init__(self, num_columns):
         self.num_columns = num_columns
         
-        # column indexes
-        self.INDIRECTION_COLUMN = 0
-        self.RID_COLUMN = 1
-        self.TIMESTAMP_COLUMN = 2
-        self.SCHEMA_ENCODING_COLUMN = 3
+        # # column indexes
+        # self.INDIRECTION_COLUMN = 0
+        # self.RID_COLUMN = 1
+        # self.TIMESTAMP_COLUMN = 2
+        # self.SCHEMA_ENCODING_COLUMN = 3
 
-        self.BASE_RID_COLUMN = 4
-        self.USER_COLUMN_START = 5
+        # self.BASE_RID_COLUMN = 4
+        # self.USER_COLUMN_START = 5
         
-        self.physical_pages = [Page() for _ in range(self.USER_COLUMN_START + num_columns)]
+        self.physical_pages = [Page() for _ in range(Config.USER_COLUMN_START + num_columns)]
         self.num_records = 0
         
     def has_capacity(self):
@@ -88,15 +91,15 @@ class BasePage():
         if not self.has_capacity():
             return False
         
-        self.physical_pages[self.INDIRECTION_COLUMN].write(-1)
-        self.physical_pages[self.RID_COLUMN].write(rid)
-        self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
-        self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(0)
+        self.physical_pages[Config.INDIRECTION_COLUMN].write(-1)
+        self.physical_pages[Config.RID_COLUMN].write(rid)
+        self.physical_pages[Config.TIMESTAMP_COLUMN].write(timestamp)
+        self.physical_pages[Config.SCHEMA_ENCODING_COLUMN].write(0)
 
-        self.physical_pages[self.BASE_RID_COLUMN].write(-1)
+        self.physical_pages[Config.BASE_RID_COLUMN].write(-1)
         
         for i, value in enumerate(columns):
-            self.physical_pages[self.USER_COLUMN_START + i].write(value)
+            self.physical_pages[Config.USER_COLUMN_START + i].write(value)
         
         self.num_records += 1
         return True
@@ -129,16 +132,16 @@ class TailPage():
         self.num_columns = num_columns
         
         # column indexes
-        self.INDIRECTION_COLUMN = 0
-        self.RID_COLUMN = 1
-        self.TIMESTAMP_COLUMN = 2
-        self.SCHEMA_ENCODING_COLUMN = 3
+        # self.INDIRECTION_COLUMN = 0
+        # self.RID_COLUMN = 1
+        # self.TIMESTAMP_COLUMN = 2
+        # self.SCHEMA_ENCODING_COLUMN = 3
 
-        self.BASE_RID_COLUMN = 4
-        self.USER_COLUMN_START = 5
+        # self.BASE_RID_COLUMN = 4
+        # self.USER_COLUMN_START = 5
 
         
-        self.physical_pages = [Page() for _ in range(self.USER_COLUMN_START + num_columns)]
+        self.physical_pages = [Page() for _ in range(Config.USER_COLUMN_START + num_columns)]
         self.num_records = 0
         
     def has_capacity(self):
@@ -148,15 +151,15 @@ class TailPage():
         if not self.has_capacity():
             return False
         
-        self.physical_pages[self.INDIRECTION_COLUMN].write(indirection)
-        self.physical_pages[self.RID_COLUMN].write(rid)
-        self.physical_pages[self.TIMESTAMP_COLUMN].write(timestamp)
-        self.physical_pages[self.SCHEMA_ENCODING_COLUMN].write(schema_encoding)
-        self.physical_pages[self.BASE_RID_COLUMN].write(base_rid)
+        self.physical_pages[Config.INDIRECTION_COLUMN].write(indirection)
+        self.physical_pages[Config.RID_COLUMN].write(rid)
+        self.physical_pages[Config.TIMESTAMP_COLUMN].write(timestamp)
+        self.physical_pages[Config.SCHEMA_ENCODING_COLUMN].write(schema_encoding)
+        self.physical_pages[Config.BASE_RID_COLUMN].write(base_rid)
         
         for i, value in enumerate(columns):
             actual_value = value if value is not None else 0
-            self.physical_pages[self.USER_COLUMN_START + i].write(actual_value)
+            self.physical_pages[Config.USER_COLUMN_START + i].write(actual_value)
         
         self.num_records += 1
         return True

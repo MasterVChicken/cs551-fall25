@@ -1,17 +1,18 @@
 from lstore.table import Table, Record
 from lstore.index import Index
 from datetime import datetime
+from lstore.config import Config
 
-INDIRECTION_COLUMN = 0
-RID_COLUMN = 1
-TIMESTAMP_COLUMN = 2
-SCHEMA_ENCODING_COLUMN = 3
-BASE_RID_COLUMN = 4
-USER_COLUMN_START = 5
+# INDIRECTION_COLUMN = 0
+# RID_COLUMN = 1
+# TIMESTAMP_COLUMN = 2
+# SCHEMA_ENCODING_COLUMN = 3
+# BASE_RID_COLUMN = 4
+# USER_COLUMN_START = 5
 
-# COL_OFFSET = 5
+# # COL_OFFSET = 5
 
-PAGE_CAPACITY = 4096 // 8
+# PAGE_CAPACITY = 4096 // 8
 
 class Query:
     """
@@ -105,7 +106,7 @@ class Query:
             for col_idx, projected_value in enumerate(projected_columns_index):
                 # if projected_value is 1, get data of this column from base page
                 if projected_value:
-                    col_value = self.table.page_directory.read_base_record(rid//PAGE_CAPACITY, rid%PAGE_CAPACITY)['columns'][col_idx]
+                    col_value = self.table.page_directory.read_base_record(rid//Config.PAGE_CAPACITY, rid%Config.PAGE_CAPACITY)['columns'][col_idx]
                     res_col.append(col_value)
                 # for 0 value, should we append None?
                 # else:
@@ -118,7 +119,7 @@ class Query:
             if page_type == 'Tail':
                 # need to edit schema?
                 for col_idx in range(len(projected_columns_index)):
-                    col_value = self.table.page_directory.read_tail_record(next_rid//PAGE_CAPACITY, next_rid%PAGE_CAPACITY)['columns'][col_idx]
+                    col_value = self.table.page_directory.read_tail_record(next_rid//Config.PAGE_CAPACITY, next_rid%Config.PAGE_CAPACITY)['columns'][col_idx]
                     res_col[col_idx] = col_value
 
             record = Record(next_rid, self.table.key, res_col)
@@ -148,8 +149,8 @@ class Query:
         # print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
         rid = selected_rids[0]
 
-        base_page_idx = rid // PAGE_CAPACITY
-        base_record_idx = rid % PAGE_CAPACITY
+        base_page_idx = rid // Config.PAGE_CAPACITY
+        base_record_idx = rid % Config.PAGE_CAPACITY
 
         base_indirection = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['indirection']
         base_schema = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['schema_encoding']
@@ -247,8 +248,8 @@ class Query:
         res = 0
         for rid in selected_rids:
             # page and record idx
-            page_idx = rid // PAGE_CAPACITY
-            record_idx = rid % PAGE_CAPACITY
+            page_idx = rid // Config.PAGE_CAPACITY
+            record_idx = rid % Config.PAGE_CAPACITY
 
             # get value from base page
             value = self.table.page_directory.read_base_record(page_idx, record_idx)['columns'][aggregate_column_index]
@@ -257,8 +258,8 @@ class Query:
             updated_rid, updated_page_type = self.table.get_version_rid(rid, relative_version)
 
             # page and record idx for relative version
-            updated_page_idx = updated_rid // PAGE_CAPACITY
-            updated_record_idx = updated_rid % PAGE_CAPACITY
+            updated_page_idx = updated_rid // Config.PAGE_CAPACITY
+            updated_record_idx = updated_rid % Config.PAGE_CAPACITY
 
             # has the updated record
             if updated_page_type == "Tail":

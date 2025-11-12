@@ -2,7 +2,7 @@ from lstore.index import Index
 from time import time
 from lstore.page import *
 from lstore.cache_policy import LRUCache
-
+from lstore.config import Config
 from datetime import datetime
 
 import math
@@ -10,14 +10,14 @@ import copy
 import os
 import struct
 
-INDIRECTION_COLUMN = 0
-RID_COLUMN = 1
-TIMESTAMP_COLUMN = 2
-SCHEMA_ENCODING_COLUMN = 3
-BASE_RID_COLUMN = 4
-USER_COLUMN_START = 5
+# INDIRECTION_COLUMN = 0
+# RID_COLUMN = 1
+# TIMESTAMP_COLUMN = 2
+# SCHEMA_ENCODING_COLUMN = 3
+# BASE_RID_COLUMN = 4
+# USER_COLUMN_START = 5
 
-PAGE_CAPACITY = 4096 // 8
+# PAGE_CAPACITY = 4096 // 8
 
 class Record:
 
@@ -75,7 +75,7 @@ class PageRange:
         # self.base_pages.append(new_page)
         
         # LRU cache
-        idx = self.num_base_records // PAGE_CAPACITY
+        idx = self.num_base_records // Config.PAGE_CAPACITY
         # (page_idx, page)
         evict = self.base_pages.put(idx, new_page)
         if evict != None: 
@@ -88,7 +88,7 @@ class PageRange:
         # self.tail_pages.append(new_page)
 
         # LRU cache
-        idx = self.num_tail_records // PAGE_CAPACITY
+        idx = self.num_tail_records // Config.PAGE_CAPACITY
         # (page_idx, page)
         evict = self.tail_pages.put(idx, new_page)
         if evict != None: 
@@ -113,7 +113,7 @@ class PageRange:
         if success:
             # We need to re-write the index part
             # page_index = len(self.base_pages) - 1
-            page_index = self.num_base_records // PAGE_CAPACITY
+            page_index = self.num_base_records // Config.PAGE_CAPACITY
             record_index = self.current_base_page.num_records - 1
             self.num_base_records += 1
             return (page_index, record_index)
@@ -129,7 +129,7 @@ class PageRange:
         )
         if success:
             # page_index = len(self.tail_pages) - 1
-            page_index = self.num_tail_records // PAGE_CAPACITY
+            page_index = self.num_tail_records // Config.PAGE_CAPACITY
             record_index = self.current_tail_page.num_records - 1
             self.num_tail_records += 1
             return (page_index, record_index)
@@ -152,13 +152,13 @@ class PageRange:
         
         # read every column independently
         return {
-            'indirection': base_page.physical_pages[INDIRECTION_COLUMN].read(record_index),
-            'rid': base_page.physical_pages[RID_COLUMN].read(record_index),
-            'timestamp': base_page.physical_pages[TIMESTAMP_COLUMN].read(record_index),
-            'schema_encoding': base_page.physical_pages[SCHEMA_ENCODING_COLUMN].read(record_index),
-            'base_rid': base_page.physical_pages[BASE_RID_COLUMN].read(record_index),
+            'indirection': base_page.physical_pages[Config.INDIRECTION_COLUMN].read(record_index),
+            'rid': base_page.physical_pages[Config.RID_COLUMN].read(record_index),
+            'timestamp': base_page.physical_pages[Config.TIMESTAMP_COLUMN].read(record_index),
+            'schema_encoding': base_page.physical_pages[Config.SCHEMA_ENCODING_COLUMN].read(record_index),
+            'base_rid': base_page.physical_pages[Config.BASE_RID_COLUMN].read(record_index),
             'columns': [
-                base_page.physical_pages[base_page.USER_COLUMN_START + i].read(record_index)
+                base_page.physical_pages[Config.USER_COLUMN_START + i].read(record_index)
                 for i in range(self.num_columns)
             ]
         }
@@ -180,13 +180,13 @@ class PageRange:
         
         # read every column independently
         return {
-            'indirection': tail_page.physical_pages[INDIRECTION_COLUMN].read(record_index),
-            'rid': tail_page.physical_pages[RID_COLUMN].read(record_index),
-            'timestamp': tail_page.physical_pages[TIMESTAMP_COLUMN].read(record_index),
-            'schema_encoding': tail_page.physical_pages[SCHEMA_ENCODING_COLUMN].read(record_index),
-            'base_rid': tail_page.physical_pages[BASE_RID_COLUMN].read(record_index),
+            'indirection': tail_page.physical_pages[Config.INDIRECTION_COLUMN].read(record_index),
+            'rid': tail_page.physical_pages[Config.RID_COLUMN].read(record_index),
+            'timestamp': tail_page.physical_pages[Config.TIMESTAMP_COLUMN].read(record_index),
+            'schema_encoding': tail_page.physical_pages[Config.SCHEMA_ENCODING_COLUMN].read(record_index),
+            'base_rid': tail_page.physical_pages[Config.BASE_RID_COLUMN].read(record_index),
             'columns': [
-                tail_page.physical_pages[tail_page.USER_COLUMN_START + i].read(record_index)
+                tail_page.physical_pages[Config.USER_COLUMN_START + i].read(record_index)
                 for i in range(self.num_columns)
             ]
         }
@@ -232,7 +232,7 @@ class PageRange:
         else:
             # base_page = self.base_pages[page_index]
             base_page = self.base_pages.get(page_index)
-        return base_page.physical_pages[INDIRECTION_COLUMN].update(record_index, new_indirection)
+        return base_page.physical_pages[Config.INDIRECTION_COLUMN].update(record_index, new_indirection)
     
     def update_base_schema_encoding(self, page_index, record_index, new_encoding):
         # if page_index >= len(self.base_pages):
@@ -243,10 +243,10 @@ class PageRange:
         else:
             # base_page = self.base_pages[page_index]
             base_page = self.base_pages.get(page_index)
-        return base_page.physical_pages[SCHEMA_ENCODING_COLUMN].update(record_index, new_encoding)
+        return base_page.physical_pages[Config.SCHEMA_ENCODING_COLUMN].update(record_index, new_encoding)
     
     def save_one_page_to_disk(self, page_idx, page, page_type):
-        for column_idx in range(self.num_columns + USER_COLUMN_START):
+        for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
             page_data = page.get_page_data(column_idx)
             # if idx == 0 and column_idx == 1: print(list(page_data))
             
@@ -263,7 +263,7 @@ class PageRange:
 
     def load_one_base_page_from_disk(self, page_idx):
         base_page = BasePage(self.num_columns)
-        for column_idx in range(self.num_columns + USER_COLUMN_START):
+        for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
             file_path = f"{self.table_path}/{column_idx}/Base/{page_idx}"
             if not os.path.exists(file_path):
                 return None
@@ -282,7 +282,7 @@ class PageRange:
 
     def load_one_tail_page_from_disk(self, page_idx):
         tail_page = TailPage(self.num_columns)
-        for column_idx in range(self.num_columns + USER_COLUMN_START):
+        for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
             file_path = f"{self.table_path}/{column_idx}/Tail/{page_idx}"
             if not os.path.exists(file_path):
                 print("no directory", page_idx)
@@ -302,7 +302,7 @@ class PageRange:
         # save all base pages
         # for idx, base_page in enumerate(self.base_pages):
         for idx in self.base_pages.cache:
-            for column_idx in range(self.num_columns + USER_COLUMN_START):
+            for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
                 base_page = self.base_pages.cache[idx]
                 page_data = base_page.get_page_data(column_idx)
                 # if idx == 0 and column_idx == 1: print(list(page_data))
@@ -321,7 +321,7 @@ class PageRange:
         # save all tail pages
         # for idx, tail_page in enumerate(self.tail_pages):
         for idx in self.tail_pages.cache:
-            for column_idx in range(self.num_columns + USER_COLUMN_START):
+            for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
                 tail_page = self.tail_pages.cache[idx]
                 page_data = tail_page.get_page_data(column_idx)
                 
@@ -341,7 +341,7 @@ class PageRange:
         for idx in range(num_base_pages):
             # print(idx)
             base_page = BasePage(self.num_columns)
-            for column_idx in range(self.num_columns + USER_COLUMN_START):
+            for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
                 file_path = f"{self.table_path}/{column_idx}/Base/{idx}"
                 with open(file_path, "rb") as fp:
                     page_data = fp.read()
@@ -357,7 +357,7 @@ class PageRange:
         # load all tail records
         for idx in range(num_tail_pages):
             tail_page = TailPage(self.num_columns)
-            for column_idx in range(self.num_columns + USER_COLUMN_START):
+            for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
                 
 
                 file_path = f"{self.table_path}/{column_idx}/Tail/{idx}"
@@ -393,8 +393,8 @@ class Table:
     def get_version_rid(self, rid, relative_version):
 
         # base record
-        page_idx =  rid // PAGE_CAPACITY
-        record_idx = rid % PAGE_CAPACITY
+        page_idx =  rid // Config.PAGE_CAPACITY
+        record_idx = rid % Config.PAGE_CAPACITY
 
         record = self.page_directory.read_base_record(page_idx, record_idx)
         indirection = record['indirection']
@@ -405,8 +405,8 @@ class Table:
         
         # 1st updated record
         rid = indirection
-        page_idx = rid // PAGE_CAPACITY
-        record_idx = rid % PAGE_CAPACITY
+        page_idx = rid // Config.PAGE_CAPACITY
+        record_idx = rid % Config.PAGE_CAPACITY
 
         record = self.page_directory.read_tail_record(page_idx, record_idx)
         indirection = record['indirection']
@@ -414,8 +414,8 @@ class Table:
         version = 0
         while version > relative_version and indirection != -1:
             rid = indirection
-            page_idx = rid // PAGE_CAPACITY
-            record_idx = rid % PAGE_CAPACITY
+            page_idx = rid // Config.PAGE_CAPACITY
+            record_idx = rid % Config.PAGE_CAPACITY
 
             record = self.page_directory.read_tail_record(page_idx, record_idx)
             indirection = record['indirection']
@@ -437,8 +437,8 @@ class Table:
         if page_type != 'Base' and page_type != 'Tail':
             raise ValueError("invalid page type")
         
-        page_idx = rid // PAGE_CAPACITY
-        record_index =  rid % PAGE_CAPACITY
+        page_idx = rid // Config.PAGE_CAPACITY
+        record_index =  rid % Config.PAGE_CAPACITY
 
         if page_type == 'Base':
             cols = self.page_directory.read_base_record(page_idx, record_index)
@@ -458,8 +458,8 @@ class Table:
         num_records = self.page_directory.num_base_records if page_type == 'Base' else self.page_directory.num_tail_records        
         for i in range(num_records):
             # get page index and local record index (in one page)
-            page_idx = i // PAGE_CAPACITY
-            record_index = i % PAGE_CAPACITY
+            page_idx = i // Config.PAGE_CAPACITY
+            record_index = i % Config.PAGE_CAPACITY
             # read from page
             if(page_type == 'Base'):
                 res = self.page_directory.read_base_record(page_idx, record_index)
@@ -510,12 +510,12 @@ class Table:
         rids = self.indexlocate(self.key, primary_key)
         for idx, rid in enumerate(rid):
             # set rid to -1 (or other invalidate value) ?
-            page_idx = rid // PAGE_CAPACITY
-            record_idx = rid % PAGE_CAPACITY
+            page_idx = rid // Config.PAGE_CAPACITY
+            record_idx = rid % Config.PAGE_CAPACITY
             if idx == 0:
-                self.page_directory.set_base_record_value(page_idx, record_idx, RID_COLUMN, -1)
+                self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
             else:
-                self.page_directory.set_tail_record_value(page_idx, record_idx, RID_COLUMN, -1)
+                self.page_directory.set_tail_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
     
 
         # Is merge not required?
@@ -525,15 +525,15 @@ class Table:
         merge_tail_page_indices = [0, 1]
         
         for tail_page_idx in merge_tail_page_indices:
-            num_tail_pages = math.ceil(self.page_directory.num_tail_records / PAGE_CAPACITY)
+            num_tail_pages = math.ceil(self.page_directory.num_tail_records / Config.PAGE_CAPACITY)
             # check tail_page_idx not out of range
             if(tail_page_idx >= num_tail_pages):
                 return False
 
             # base rids for all current tail pages
-            tail_page_base_rids = self.page_directory.get_tail_page(tail_page_idx, BASE_RID_COLUMN)
-            tail_page_schema = self.page_directory.get_tail_page(tail_page_idx, SCHEMA_ENCODING_COLUMN)
-            tail_page_rid = self.page_directory.get_tail_page(tail_page_idx, RID_COLUMN)
+            tail_page_base_rids = self.page_directory.get_tail_page(tail_page_idx, Config.BASE_RID_COLUMN)
+            tail_page_schema = self.page_directory.get_tail_page(tail_page_idx, Config.SCHEMA_ENCODING_COLUMN)
+            tail_page_rid = self.page_directory.get_tail_page(tail_page_idx, Config.RID_COLUMN)
             
             base_page_copies = [{} for _ in range(self.num_columns)]
 
@@ -548,7 +548,7 @@ class Table:
                     column_value = tail_page.read(rec_idx)
                     base_rid = tail_page_base_rids.read(rec_idx)
                     # find the corresponding base page
-                    base_page_idx = base_rid // PAGE_CAPACITY
+                    base_page_idx = base_rid // Config.PAGE_CAPACITY
 
                     if base_page_idx not in base_page_copies[col_idx]:
                         base_page = copy.deepcopy(self.page_directory.get_base_page(base_page_idx, col_idx))
@@ -561,8 +561,8 @@ class Table:
                             base_page_copies[col_idx][base_page_idx].write(column_value)
                     
                     # get the tsp of current base page
-                    base_record_idx = base_rid % PAGE_CAPACITY
-                    tsp = self.page_directory.read_base_record(base_page_idx, base_record_idx)[BASE_RID_COLUMN]
+                    base_record_idx = base_rid % Config.PAGE_CAPACITY
+                    tsp = self.page_directory.read_base_record(base_page_idx, base_record_idx)[Config.BASE_RID_COLUMN]
                     tid = tail_page_rid.read(rec_idx)
                     # update current tsp for the base record
                     if tid > tsp:

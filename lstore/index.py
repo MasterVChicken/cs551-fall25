@@ -3,13 +3,14 @@ A data strucutre holding indices for various columns of a table. Key column shou
 """
 
 from collections import OrderedDict
+from lstore.config import Config
 
-INDIRECTION_COLUMN = 0
-RID_COLUMN = 1
-TIMESTAMP_COLUMN = 2
-SCHEMA_ENCODING_COLUMN = 3
-BASE_RID_COLUMN = 4
-USER_COLUMN_START = 5
+# INDIRECTION_COLUMN = 0
+# RID_COLUMN = 1
+# TIMESTAMP_COLUMN = 2
+# SCHEMA_ENCODING_COLUMN = 3
+# BASE_RID_COLUMN = 4
+# USER_COLUMN_START = 5
 
 # data structure used to store the index
 class OrderedDictList:
