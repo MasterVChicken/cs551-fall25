@@ -211,7 +211,8 @@ class Database():
 
         # delete the table file too
         if self.path:
-            table_file = os.path.join(self.path, f"{name}.tbl")
+            # table_file = os.path.join(self.path, f"{name}.tbl")
+            table_file = os.path.join(self.path, f"{name}")
             if os.path.exists(table_file):
                 os.remove(table_file)
             self.close()

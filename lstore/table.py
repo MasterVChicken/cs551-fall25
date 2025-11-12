@@ -1,6 +1,7 @@
 from lstore.index import Index
 from time import time
 from lstore.page import *
+from lstore.cache_policy import LRUCache
 
 from datetime import datetime
 
@@ -35,8 +36,13 @@ class PageRange:
         self.range_id = range_id
         self.num_columns = num_columns
         
-        self.base_pages = []
-        self.tail_pages = []
+        # self.base_pages = []
+        # self.tail_pages = []
+        
+        # LRU cache
+        self.cache_capacity = 20
+        self.base_pages = LRUCache(self.cache_capacity)
+        self.tail_pages = LRUCache(self.cache_capacity)
         
         self.current_base_page = None
         self.current_tail_page = None
@@ -49,38 +55,55 @@ class PageRange:
         # Initialize 1st base page and tail page
         # self._allocate_base_page()
         # self._allocate_tail_page()
-        if(self.num_base_records == 0):
-            self._allocate_base_page()
-        if(self.num_tail_records == 0):
-            self._allocate_tail_page()
+        # if(self.num_base_records == 0):
+        #     self._allocate_base_page()
+        # if(self.num_tail_records == 0):
+        #     self._allocate_tail_page()
         
-        if(self.num_base_records != 0 or self.num_tail_records != 0):
-            num_base_pages = (self.num_base_records // PAGE_CAPACITY) + 1
-            num_tail_pages = (self.num_tail_records // PAGE_CAPACITY) + 1
+        # if(self.num_base_records != 0 or self.num_tail_records != 0):
+        #     num_base_pages = (self.num_base_records // PAGE_CAPACITY) + 1
+        #     num_tail_pages = (self.num_tail_records // PAGE_CAPACITY) + 1
 
-            # print(f"num_base_records: {num_base_records}, num_base_pages: {num_base_pages}, num_tail_pages: {num_tail_pages}, num_tail_records {num_tail_records}")
+        #     # print(f"num_base_records: {num_base_records}, num_base_pages: {num_base_pages}, num_tail_pages: {num_tail_pages}, num_tail_records {num_tail_records}")
             
-            self.load_from_disk(num_base_pages, num_tail_pages)
-            if(self.num_base_records != 0): self.current_base_page = self.base_pages[-1]
-            if(self.num_tail_records != 0): self.current_tail_page = self.base_pages[-1]
+        #     self.load_from_disk(num_base_pages, num_tail_pages)
+        #     if(self.num_base_records != 0): self.current_base_page = self.base_pages[-1]
+        #     if(self.num_tail_records != 0): self.current_tail_page = self.base_pages[-1]
     
     def _allocate_base_page(self):
         new_page = BasePage(self.num_columns)
-        self.base_pages.append(new_page)
+        # self.base_pages.append(new_page)
+        
+        # LRU cache
+        idx = self.num_base_records // PAGE_CAPACITY
+        # (page_idx, page)
+        evict = self.base_pages.put(idx, new_page)
+        if evict != None: 
+            self.save_one_page_to_disk(evict[0], evict[1], "Base")
         self.current_base_page = new_page
         return new_page
     
     def _allocate_tail_page(self):
         new_page = TailPage(self.num_columns)
-        self.tail_pages.append(new_page)
+        # self.tail_pages.append(new_page)
+
+        # LRU cache
+        idx = self.num_tail_records // PAGE_CAPACITY
+        # (page_idx, page)
+        evict = self.tail_pages.put(idx, new_page)
+        if evict != None: 
+            self.save_one_page_to_disk(evict[0], evict[1], "Tail")
+
         self.current_tail_page = new_page
         return new_page
     
     def has_base_capacity(self):
-        return self.current_base_page.has_capacity()
+        # return self.current_base_page.has_capacity()
+        return False if self.current_base_page == None else self.current_base_page.has_capacity()
     
     def has_tail_capacity(self):
-        return self.current_tail_page.has_capacity()
+        # return self.current_tail_page.has_capacity()
+        return False if self.current_tail_page == None else self.current_tail_page.has_capacity()
     
     def insert_base_record(self, rid, timestamp, columns):
         if not self.has_base_capacity():
@@ -89,7 +112,8 @@ class PageRange:
         success = self.current_base_page.insert_record(rid, timestamp, columns)
         if success:
             # We need to re-write the index part
-            page_index = len(self.base_pages) - 1
+            # page_index = len(self.base_pages) - 1
+            page_index = self.num_base_records // PAGE_CAPACITY
             record_index = self.current_base_page.num_records - 1
             self.num_base_records += 1
             return (page_index, record_index)
@@ -104,20 +128,27 @@ class PageRange:
             rid, indirection, timestamp, schema_encoding, base_rid, columns
         )
         if success:
-            page_index = len(self.tail_pages) - 1
+            # page_index = len(self.tail_pages) - 1
+            page_index = self.num_tail_records // PAGE_CAPACITY
             record_index = self.current_tail_page.num_records - 1
             self.num_tail_records += 1
             return (page_index, record_index)
         return None
     
     def read_base_record(self, page_index, record_index):
-        if page_index >= len(self.base_pages):
-            return None
-        
-        base_page = self.base_pages[page_index]
-        if record_index >= base_page.num_records:
-            # print("read_base_record: ", page_index, record_index, base_page.num_records)
-            return None
+        # if page_index >= len(self.base_pages):
+        #     return None
+
+        if page_index not in self.base_pages.cache:
+            base_page = self.load_one_base_page_from_disk(page_index)
+            if base_page == None:
+                return None
+        else:
+            # base_page = self.base_pages[page_index]
+            base_page = self.base_pages.get(page_index)
+            if record_index >= base_page.num_records:
+                # print("read_base_record: ", page_index, record_index, base_page.num_records)
+                return None
         
         # read every column independently
         return {
@@ -133,12 +164,19 @@ class PageRange:
         }
     
     def read_tail_record(self, page_index, record_index):
-        if page_index >= len(self.tail_pages):
-            return None
-        
-        tail_page = self.tail_pages[page_index]
-        if record_index >= tail_page.num_records:
-            return None
+        # if page_index >= len(self.tail_pages):
+        #     return None
+        if page_index not in self.tail_pages.cache:
+            tail_page = self.load_one_tail_page_from_disk(page_index)
+            if tail_page == None:
+                # print("here")
+                print(page_index, record_index)
+                return None
+        else:
+            # tail_page = self.tail_pages[page_index]
+            tail_page = self.tail_pages.get(page_index)
+            if record_index >= tail_page.num_records:
+                return None
         
         # read every column independently
         return {
@@ -154,47 +192,118 @@ class PageRange:
         }
     
     def set_base_record_value(self, page_index, record_index, column_idx, value):
-        if page_index >= len(self.base_pages):
-            return None
-        
-        base_page = self.base_pages[page_index]
-        if record_index >= base_page.num_records:
-            # print("read_base_record: ", page_index, record_index)
-            return None
+        # if page_index >= len(self.base_pages):
+        #     return None
+
+        if page_index not in self.base_pages.cache:
+            base_page = self.load_one_base_page_from_disk(page_index)
+        else:
+            # base_page = self.base_pages[page_index]
+            base_page = self.base_pages.get(page_index)
+            if record_index >= base_page.num_records:
+                # print("read_base_record: ", page_index, record_index)
+                return None
         
         # set value based on column_idx
         base_page.physical_pages[column_idx].write(value)
 
     def set_tail_record_value(self, page_index, record_index, column_idx, value):
-        if page_index >= len(self.tail_pages):
-            return None
-        
-        tail_page = self.tail_pages[page_index]
-        if record_index >= tail_page.num_records:
-            return None
+        # if page_index >= len(self.tail_pages):
+        #     return None
+
+        if page_index not in self.tail_pages.cache:
+            tail_page = self.load_one_tail_page_from_disk(page_index)
+        else:
+            # tail_page = self.tail_pages[page_index]
+            tail_page = self.tail_pages.get(page_index)
+            if record_index >= tail_page.num_records:
+                return None
         
         # set value based on column_idx
         tail_page.physical_pages[column_idx].write(value)
 
     
     def update_base_indirection(self, page_index, record_index, new_indirection):
-        if page_index >= len(self.base_pages):
-            return False
-        
-        base_page = self.base_pages[page_index]
+        # if page_index >= len(self.base_pages):
+        #     return False
+
+        if page_index not in self.base_pages.cache:
+            base_page = self.load_one_base_page_from_disk(page_index)
+        else:
+            # base_page = self.base_pages[page_index]
+            base_page = self.base_pages.get(page_index)
         return base_page.physical_pages[INDIRECTION_COLUMN].update(record_index, new_indirection)
     
     def update_base_schema_encoding(self, page_index, record_index, new_encoding):
-        if page_index >= len(self.base_pages):
-            return False
-        
-        base_page = self.base_pages[page_index]
+        # if page_index >= len(self.base_pages):
+        #     return False
+
+        if page_index not in self.base_pages.cache:
+            base_page = self.load_one_base_page_from_disk(page_index)
+        else:
+            # base_page = self.base_pages[page_index]
+            base_page = self.base_pages.get(page_index)
         return base_page.physical_pages[SCHEMA_ENCODING_COLUMN].update(record_index, new_encoding)
     
+    def save_one_page_to_disk(self, page_idx, page, page_type):
+        for column_idx in range(self.num_columns + USER_COLUMN_START):
+            page_data = page.get_page_data(column_idx)
+            # if idx == 0 and column_idx == 1: print(list(page_data))
+            
+            page_path = os.path.join(self.table_path, str(column_idx))
+            page_path = os.path.join(page_path, page_type)
+
+            if not os.path.exists(page_path):
+                os.makedirs(page_path)
+
+            # for record_byte in page_data:
+            file_path = os.path.join(page_path, str(page_idx))
+            with open(file_path, "wb") as fp:
+                fp.write(page_data)
+
+    def load_one_base_page_from_disk(self, page_idx):
+        base_page = BasePage(self.num_columns)
+        for column_idx in range(self.num_columns + USER_COLUMN_START):
+            file_path = f"{self.table_path}/{column_idx}/Base/{page_idx}"
+            if not os.path.exists(file_path):
+                return None
+            with open(file_path, "rb") as fp:
+                page_data = fp.read()
+
+            # if idx == 0 and column_idx == 1: print(list(page_data))
+            base_page.set_page_data(column_idx, page_data, len(page_data)//8)
+            # print(len(page_data)//8, base_page.num_records)
+        
+        evict = self.base_pages.put(page_idx, base_page)
+        if evict != None: 
+            self.save_one_page_to_disk(evict[0], evict[1], "Base")
+        
+        return base_page
+
+    def load_one_tail_page_from_disk(self, page_idx):
+        tail_page = TailPage(self.num_columns)
+        for column_idx in range(self.num_columns + USER_COLUMN_START):
+            file_path = f"{self.table_path}/{column_idx}/Tail/{page_idx}"
+            if not os.path.exists(file_path):
+                print("no directory", page_idx)
+                return None
+            with open(file_path, "rb") as fp:
+                page_data = fp.read()
+            
+            tail_page.set_page_data(column_idx, page_data, len(page_data)//8)
+       
+        evict = self.tail_pages.put(page_idx, tail_page)
+        if evict != None: 
+            self.save_one_page_to_disk(evict[0], evict[1], "Tail")
+
+        return tail_page
+
     def save_to_disk(self):
         # save all base pages
-        for idx, base_page in enumerate(self.base_pages):
+        # for idx, base_page in enumerate(self.base_pages):
+        for idx in self.base_pages.cache:
             for column_idx in range(self.num_columns + USER_COLUMN_START):
+                base_page = self.base_pages.cache[idx]
                 page_data = base_page.get_page_data(column_idx)
                 # if idx == 0 and column_idx == 1: print(list(page_data))
                 
@@ -210,8 +319,10 @@ class PageRange:
                     fp.write(page_data)
 
         # save all tail pages
-        for idx, tail_page in enumerate(self.tail_pages):
+        # for idx, tail_page in enumerate(self.tail_pages):
+        for idx in self.tail_pages.cache:
             for column_idx in range(self.num_columns + USER_COLUMN_START):
+                tail_page = self.tail_pages.cache[idx]
                 page_data = tail_page.get_page_data(column_idx)
                 
                 page_path = os.path.join(self.table_path, str(column_idx))
