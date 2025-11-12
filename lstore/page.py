@@ -105,6 +105,11 @@ class BasePage():
         return True
     
     # Persistence helper functions for BasePage
+    def get_a_page(self, column_index):
+        if column_index >= len(self.physical_pages):
+            return None
+        return self.physical_pages[column_index]
+    
     def get_page_data(self, column_index):
         if column_index >= len(self.physical_pages):
             return None
@@ -165,6 +170,11 @@ class TailPage():
         return True
     
     # Persistence helper functions for TailPage
+    def get_a_page(self, column_index):
+        if column_index >= len(self.physical_pages):
+            return None
+        return self.physical_pages[column_index]
+
     def get_page_data(self, column_index):
         if column_index >= len(self.physical_pages):
             return None

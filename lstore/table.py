@@ -143,6 +143,9 @@ class PageRange:
             base_page = self.load_one_base_page_from_disk(page_index)
             if base_page == None:
                 return None
+            evict = self.base_pages.put(page_index, base_page)
+            if evict != None: 
+                self.save_one_page_to_disk(evict[0], evict[1], "Base")
         else:
             # base_page = self.base_pages[page_index]
             base_page = self.base_pages.get(page_index)
@@ -169,9 +172,11 @@ class PageRange:
         if page_index not in self.tail_pages.cache:
             tail_page = self.load_one_tail_page_from_disk(page_index)
             if tail_page == None:
-                # print("here")
-                print(page_index, record_index)
                 return None
+            
+            evict = self.tail_pages.put(page_index, tail_page)
+            if evict != None: 
+                self.save_one_page_to_disk(evict[0], evict[1], "Tail")
         else:
             # tail_page = self.tail_pages[page_index]
             tail_page = self.tail_pages.get(page_index)
@@ -197,6 +202,12 @@ class PageRange:
 
         if page_index not in self.base_pages.cache:
             base_page = self.load_one_base_page_from_disk(page_index)
+            if base_page == None:
+                return None
+            
+            evict = self.base_pages.put(page_index, base_page)
+            if evict != None: 
+                self.save_one_page_to_disk(evict[0], evict[1], "Base")
         else:
             # base_page = self.base_pages[page_index]
             base_page = self.base_pages.get(page_index)
@@ -213,6 +224,12 @@ class PageRange:
 
         if page_index not in self.tail_pages.cache:
             tail_page = self.load_one_tail_page_from_disk(page_index)
+            if tail_page == None:
+                return None
+            
+            evict = self.tail_pages.put(page_index, tail_page)
+            if evict != None: 
+                self.save_one_page_to_disk(evict[0], evict[1], "Tail")
         else:
             # tail_page = self.tail_pages[page_index]
             tail_page = self.tail_pages.get(page_index)
@@ -229,6 +246,12 @@ class PageRange:
 
         if page_index not in self.base_pages.cache:
             base_page = self.load_one_base_page_from_disk(page_index)
+            if base_page == None:
+                return None
+
+            evict = self.base_pages.put(page_index, base_page)
+            if evict != None: 
+                self.save_one_page_to_disk(evict[0], evict[1], "Base")
         else:
             # base_page = self.base_pages[page_index]
             base_page = self.base_pages.get(page_index)
@@ -240,6 +263,12 @@ class PageRange:
 
         if page_index not in self.base_pages.cache:
             base_page = self.load_one_base_page_from_disk(page_index)
+            if base_page == None:
+                return None
+
+            evict = self.base_pages.put(page_index, base_page)
+            if evict != None: 
+                self.save_one_page_to_disk(evict[0], evict[1], "Base")
         else:
             # base_page = self.base_pages[page_index]
             base_page = self.base_pages.get(page_index)
@@ -285,7 +314,7 @@ class PageRange:
         for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
             file_path = f"{self.table_path}/{column_idx}/Tail/{page_idx}"
             if not os.path.exists(file_path):
-                print("no directory", page_idx)
+                # print("no directory", page_idx)
                 return None
             with open(file_path, "rb") as fp:
                 page_data = fp.read()
@@ -531,28 +560,51 @@ class Table:
                 return False
 
             # base rids for all current tail pages
-            tail_page_base_rids = self.page_directory.get_tail_page(tail_page_idx, Config.BASE_RID_COLUMN)
-            tail_page_schema = self.page_directory.get_tail_page(tail_page_idx, Config.SCHEMA_ENCODING_COLUMN)
-            tail_page_rid = self.page_directory.get_tail_page(tail_page_idx, Config.RID_COLUMN)
+            # tail_page_base_rids = self.page_directory.get_tail_page(tail_page_idx, Config.BASE_RID_COLUMN)
+            # tail_page_schema = self.page_directory.get_tail_page(tail_page_idx, Config.SCHEMA_ENCODING_COLUMN)
+            # tail_page_rid = self.page_directory.get_tail_page(tail_page_idx, Config.RID_COLUMN)
+
+            tail_page = self.page_directory.tail_pages.get(tail_page_idx)
+            if tail_page == None:
+                tail_page = self.page_directory.load_one_tail_page_from_disk(tail_page_idx)
+                if tail_page == None:
+                    continue
+                evict = self.tail_pages.put(base_page_idx, base_page)
+                if evict != None: 
+                    self.save_one_page_to_disk(evict[0], evict[1], "Tail")
+
+            tail_page_base_rids = tail_page.get_a_page(Config.BASE_RID_COLUMN)
+            tail_page_schema = tail_page.get_a_page(Config.SCHEMA_ENCODING_COLUMN)
+            tail_page_rid = tail_page.get_a_page(Config.RID_COLUMN)
             
             base_page_copies = [{} for _ in range(self.num_columns)]
 
             # for each column
             for col_idx in range(self.num_columns):
                 # get the tail page for this column
-                tail_page = self.page_directory.get_tail_page(tail_page_idx, col_idx)
+                # tail_page = self.page_directory.get_tail_page(tail_page_idx, col_idx)
+                tail_page_column = tail_page.get_a_page(col_idx)
 
                 updated = []
                 # from the last updated tail record
-                for rec_idx in range((tail_page.num_records - 1), -1, -1):
-                    column_value = tail_page.read(rec_idx)
+                for rec_idx in range((tail_page_column.num_records - 1), -1, -1):
+                    column_value = tail_page_column.read(rec_idx)
                     base_rid = tail_page_base_rids.read(rec_idx)
                     # find the corresponding base page
                     base_page_idx = base_rid // Config.PAGE_CAPACITY
 
                     if base_page_idx not in base_page_copies[col_idx]:
-                        base_page = copy.deepcopy(self.page_directory.get_base_page(base_page_idx, col_idx))
-                        base_page_copies[col_idx][base_page_idx] = base_page
+                        # base_page = copy.deepcopy(self.page_directory.get_base_page(base_page_idx, col_idx))
+                        base_page = (self.page_directory.base_pages.get(base_page_idx))
+                        if base_page == None:
+                            base_page = self.page_directory.load_one_base_page_from_disk(base_page_idx)
+                            if base_page == None:
+                                continue
+                            evict = self.tail_pages.put(base_page_idx, base_page)
+                            if evict != None: 
+                                self.save_one_page_to_disk(evict[0], evict[1], "Base")
+                        
+                        base_page_copies[col_idx][base_page_idx] = copy.deepcopy(base_page)
                     
                     # base record has not been updated
                     if base_rid not in updated:
