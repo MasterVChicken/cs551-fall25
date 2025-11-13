@@ -660,7 +660,7 @@ class Table:
                             if evict != None: 
                                 self.page_directory.save_one_page_to_disk(evict[0], evict[1], "Base")
                         
-                        base_page_copies[col_idx][base_page_idx] = copy.deepcopy(base_page)
+                        base_page_copies[col_idx][base_page_idx] = copy.deepcopy(base_page.physical_pages[col_idx])
                     
                     # base record has not been updated
                     if base_rid not in updated:
