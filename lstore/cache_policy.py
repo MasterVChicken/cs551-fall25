@@ -34,4 +34,5 @@ class LRUCache:
         if key in cache:
             cache.move_to_end(key)
             cache[key].physical_pages[column_index] = page
+            return
         return False

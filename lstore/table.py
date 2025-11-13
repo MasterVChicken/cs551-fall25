@@ -204,7 +204,7 @@ class PageRange:
                 return None
         
         # set value based on column_idx
-        base_page.physical_pages[column_idx].write(value)
+        base_page.physical_pages[column_idx].update(record_index, value)
 
     def set_tail_record_value(self, page_index, record_index, column_idx, value):
         # if page_index >= len(self.tail_pages):
@@ -229,7 +229,7 @@ class PageRange:
                 return None
         
         # set value based on column_idx
-        tail_page.physical_pages[column_idx].write(value)
+        tail_page.physical_pages[column_idx].update(record_index, value)
 
     
     def update_base_indirection(self, page_index, record_index, new_indirection):
@@ -644,7 +644,7 @@ class Table:
                     if base_rid not in updated:
                         updated.append(base_rid)
                         if (tail_page_schema.read(rec_idx) >> col_idx) & 1:
-                            base_page_copies[col_idx][base_page_idx].write(column_value)
+                            base_page_copies[col_idx][base_page_idx].update(rec_idx, column_value)
                     
                     # get the tsp of current base page
                     base_record_idx = base_rid % Config.PAGE_CAPACITY
