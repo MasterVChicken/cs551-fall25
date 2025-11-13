@@ -628,6 +628,7 @@ class Table:
                         # base_page = copy.deepcopy(self.page_directory.get_base_page(base_page_idx, col_idx))
                         # base_page = (self.page_directory.base_pages.get(base_page_idx))
                         base_page = (self.page_directory.Buffer.get(base_page_idx, "Base"))
+                        # print(base_page)
                         if base_page == None:
                             base_page = self.page_directory.load_one_base_page_from_disk(base_page_idx)
                             if base_page == None:
@@ -654,10 +655,10 @@ class Table:
                         self.page_directory.update_base_tsp(base_page_idx, base_record_idx, tid)
 
             # overwrite the original base page with the updated copied base page
-            for col_idx in range(len(base_page_copies)):
+            for col_idx in range(self.num_columns):
                 for page_idx in base_page_copies[col_idx].keys():
                     # self.page_directory.base_pages[page_idx] = base_page_copies[col_idx][page_idx]
-                    self.page_directory.Buffer.set(page_idx, base_page_copies[col_idx][page_idx], "Base")
+                    self.page_directory.Buffer.set(page_idx, base_page_copies[col_idx][page_idx], col_idx, "Base")
         
     # more methods coupled with saving DB
     # ---------- persistence helpers ----------

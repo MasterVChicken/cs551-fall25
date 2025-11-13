@@ -12,9 +12,11 @@ class LRUCache:
             return None
         # Move key to end (most recently used)
         cache.move_to_end(key)
+        # print(cache[key], page_type)
         return cache[key]
 
     def put(self, key, page, page_type):
+        # print(page, page_type)
         cache = self.base_cache if page_type == "Base" else self.tail_cache
         if key in cache:
             # Update and move to end
@@ -27,9 +29,9 @@ class LRUCache:
             return cache.popitem(last=False)
         return None
     
-    def set(self, key, page, page_type):
+    def set(self, key, page, column_index, page_type):
         cache = self.base_cache if page_type == "Base" else self.tail_cache
         if key in cache:
             cache.move_to_end(key)
-            cache[key] = page
+            cache[key].physical_pages[column_index] = page
         return False
