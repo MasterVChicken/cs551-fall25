@@ -670,7 +670,7 @@ class Table:
                     
                     # get the tsp of current base page
                     base_record_idx = base_rid % Config.PAGE_CAPACITY
-                    tsp = self.page_directory.read_base_record(base_page_idx, base_record_idx)[Config.BASE_RID_COLUMN]
+                    tsp = self.page_directory.read_base_record(base_page_idx, base_record_idx)['base_rid']
                     tid = tail_page_rid.read(rec_idx)
                     # update current tsp for the base record
                     if tid > tsp:
@@ -679,7 +679,8 @@ class Table:
             # overwrite the original base page with the updated copied base page
             for col_idx in range(len(base_page_copies)):
                 for page_idx in base_page_copies[col_idx].keys():
-                    self.page_directory.base_pages[page_idx] = base_page_copies[col_idx][page_idx]
+                    # self.page_directory.base_pages[page_idx] = base_page_copies[col_idx][page_idx]
+                    self.page_directory.Buffer.set(page_idx, base_page_copies[col_idx][page_idx], "Base")
         
     # more methods coupled with saving DB
     # ---------- persistence helpers ----------
