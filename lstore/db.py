@@ -7,9 +7,11 @@ from lstore.config import Config
 
 class Database():
 
-    def __init__(self):
+    def __init__(self, path= "./DefaultDB"):
         self.tables = {}
-        self.path = None
+        self.path = path
+        if (not os.path.exists(path)):
+            os.makedirs(self.path, exist_ok=True)
 
     def _meta_path(self):
         return os.path.join(self.path, "db_meta.json")
