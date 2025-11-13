@@ -213,6 +213,12 @@ class Query:
         # print(f'Before update index: primary_key_idx: {self.table.key}, primary_key_value: {primary_key}, updated_record_rid: {updated_rid}')
         self.table.index.update_index(self.table.key, primary_key, updated_rid, "Tail")
 
+        # merge add here
+        merge_threshold = 15
+        if (self.table.page_directory.num_tail_records // Config.PAGE_CAPACITY) % merge_threshold == 0:
+            # print("Call merge")
+            self.table.merge()
+
         return True
 
     

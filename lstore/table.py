@@ -274,6 +274,22 @@ class PageRange:
             base_page = self.base_pages.get(page_index)
         return base_page.physical_pages[Config.SCHEMA_ENCODING_COLUMN].update(record_index, new_encoding)
     
+    def update_base_tsp(self, page_index, record_index, new_tsp):
+        # if page_index >= len(self.base_pages):
+        #     return False
+        if page_index not in self.base_pages.cache:
+            base_page = self.load_one_base_page_from_disk(page_index)
+            if base_page == None:
+                return None
+
+            evict = self.base_pages.put(page_index, base_page)
+            if evict != None: 
+                self.save_one_page_to_disk(evict[0], evict[1], "Base")
+        else:
+            base_page = self.base_pages[page_index]
+    
+        return base_page.physical_pages[Config.BASE_RID_COLUMN].update(record_index, new_tsp)
+    
     def save_one_page_to_disk(self, page_idx, page, page_type):
         for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
             page_data = page.get_page_data(column_idx)
@@ -547,8 +563,8 @@ class Table:
                 self.page_directory.set_tail_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
     
 
-        # Is merge not required?
-    def __merge(self):
+    # Is merge not required?
+    def merge(self):
         # print("merge is happening")
         # suppose we merge first 2 tail pages once merge.
         merge_tail_page_indices = [0, 1]
@@ -569,9 +585,9 @@ class Table:
                 tail_page = self.page_directory.load_one_tail_page_from_disk(tail_page_idx)
                 if tail_page == None:
                     continue
-                evict = self.tail_pages.put(base_page_idx, base_page)
+                evict = self.page_directory.tail_pages.put(tail_page_idx, tail_page)
                 if evict != None: 
-                    self.save_one_page_to_disk(evict[0], evict[1], "Tail")
+                    self.page_directory.save_one_page_to_disk(evict[0], evict[1], "Tail")
 
             tail_page_base_rids = tail_page.get_a_page(Config.BASE_RID_COLUMN)
             tail_page_schema = tail_page.get_a_page(Config.SCHEMA_ENCODING_COLUMN)
@@ -587,7 +603,7 @@ class Table:
 
                 updated = []
                 # from the last updated tail record
-                for rec_idx in range((tail_page_column.num_records - 1), -1, -1):
+                for rec_idx in range((tail_page_column.num_items - 1), -1, -1):
                     column_value = tail_page_column.read(rec_idx)
                     base_rid = tail_page_base_rids.read(rec_idx)
                     # find the corresponding base page
