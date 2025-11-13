@@ -35,14 +35,9 @@ class PageRange:
 
         self.range_id = range_id
         self.num_columns = num_columns
-        
-        # self.base_pages = []
-        # self.tail_pages = []
-        
+                
         # LRU cache
         self.cache_capacity = 20
-        # self.base_pages = LRUCache(self.cache_capacity)
-        # self.tail_pages = LRUCache(self.cache_capacity)
         self.Buffer = LRUCache(self.cache_capacity)
         
         self.current_base_page = None
@@ -53,24 +48,6 @@ class PageRange:
         self.num_base_records = num_base_records
         self.num_tail_records = num_tail_records
         
-        # Initialize 1st base page and tail page
-        # self._allocate_base_page()
-        # self._allocate_tail_page()
-        # if(self.num_base_records == 0):
-        #     self._allocate_base_page()
-        # if(self.num_tail_records == 0):
-        #     self._allocate_tail_page()
-        
-        # if(self.num_base_records != 0 or self.num_tail_records != 0):
-        #     num_base_pages = (self.num_base_records // PAGE_CAPACITY) + 1
-        #     num_tail_pages = (self.num_tail_records // PAGE_CAPACITY) + 1
-
-        #     # print(f"num_base_records: {num_base_records}, num_base_pages: {num_base_pages}, num_tail_pages: {num_tail_pages}, num_tail_records {num_tail_records}")
-            
-        #     self.load_from_disk(num_base_pages, num_tail_pages)
-        #     if(self.num_base_records != 0): self.current_base_page = self.base_pages[-1]
-        #     if(self.num_tail_records != 0): self.current_tail_page = self.base_pages[-1]
-    
     def _allocate_base_page(self):
         new_page = BasePage(self.num_columns)
         # self.base_pages.append(new_page)
@@ -684,32 +661,9 @@ class Table:
         
     # more methods coupled with saving DB
     # ---------- persistence helpers ----------
-    def save(self, filepath):
-        """
-        Save the whole table object to disk.
-        For this project it's fine to pickle the table.
-        """
-        # with open(filepath, "wb") as f:
-        #     pickle.dump(self, f)
-
-    @staticmethod
-    def load(filepath):
-        """
-        Load a table object from disk.
-        """
-        # with open(filepath, "rb") as f:
-        #     table = pickle.load(f)
-        # return table
 
     # close function for Table class
     def close(self):
-        # meta_data_path = os.path.join(self.table_path, 'meta_data')
-        # with open(meta_data_path, "wb") as fp:
-        #     fp.write(struct.pack('<i', self.num_columns))
-        #     fp.write(struct.pack('<i', self.key))
-        #     fp.write(struct.pack('<i', self.page_directory.num_base_records))
-        #     fp.write(struct.pack('<i', self.page_directory.num_tail_records))
-
         # save all records
         self.page_directory.save_to_disk()
         pass
