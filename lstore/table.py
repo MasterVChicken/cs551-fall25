@@ -579,8 +579,8 @@ class Table:
     # Is merge not required?
     def merge(self):
         # print("merge is happening")
-        # suppose we merge first 2 tail pages once merge.
-        merge_tail_page_indices = [0, 1]
+        # suppose we merge first 3 tail pages once merge.
+        merge_tail_page_indices = [0, 1, 2]
         
         for tail_page_idx in merge_tail_page_indices:
             num_tail_pages = math.ceil(self.page_directory.num_tail_records / Config.PAGE_CAPACITY)
@@ -614,7 +614,7 @@ class Table:
             for col_idx in range(self.num_columns):
                 # get the tail page for this column
                 # tail_page = self.page_directory.get_tail_page(tail_page_idx, col_idx)
-                tail_page_column = tail_page.get_a_page(col_idx)
+                tail_page_column = tail_page.get_a_page(col_idx+Config.USER_COLUMN_START)
 
                 updated = []
                 # from the last updated tail record
@@ -638,13 +638,14 @@ class Table:
                             if evict != None: 
                                 self.page_directory.save_one_page_to_disk(evict[0], evict[1], "Base")
                         
-                        base_page_copies[col_idx][base_page_idx] = copy.deepcopy(base_page.physical_pages[col_idx])
-                    
+                        base_page_copies[col_idx][base_page_idx] = copy.deepcopy(base_page.physical_pages[col_idx+Config.USER_COLUMN_START])
+
                     # base record has not been updated
                     if base_rid not in updated:
                         updated.append(base_rid)
                         if (tail_page_schema.read(rec_idx) >> col_idx) & 1:
-                            base_page_copies[col_idx][base_page_idx].update(rec_idx, column_value)
+                            base_rec_idx = base_rid % Config.PAGE_CAPACITY
+                            base_page_copies[col_idx][base_page_idx].update(base_rec_idx, column_value)
                     
                     # get the tsp of current base page
                     base_record_idx = base_rid % Config.PAGE_CAPACITY
@@ -658,8 +659,8 @@ class Table:
             for col_idx in range(self.num_columns):
                 for page_idx in base_page_copies[col_idx].keys():
                     # self.page_directory.base_pages[page_idx] = base_page_copies[col_idx][page_idx]
-                    self.page_directory.Buffer.set(page_idx, base_page_copies[col_idx][page_idx], col_idx, "Base")
-        
+                    self.page_directory.Buffer.set(page_idx, base_page_copies[col_idx][page_idx], (col_idx+Config.USER_COLUMN_START), "Base")
+                    
     # more methods coupled with saving DB
     # ---------- persistence helpers ----------
 
