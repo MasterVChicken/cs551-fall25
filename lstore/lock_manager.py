@@ -9,7 +9,8 @@ class LockManager:
     # NO-WAIT policy for deadlock prevention
     # Strong Strict 2PL protocol
     def __init__(self):
-        self.locks = {}  # {lock_id: {'type': LockType, 'holders': set()}}
+        # {lock_id: {'type': LockType, 'holders': set()}}
+        self.locks = {}  
         self.lock = threading.Lock()
         
     def acquire_lock(self, lock_id, lock_type, transaction_id):

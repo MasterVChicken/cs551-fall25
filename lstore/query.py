@@ -2,6 +2,7 @@ from lstore.table import Table, Record
 from lstore.index import Index
 from datetime import datetime
 from lstore.config import Config
+from lstore.lock_manager import LockType
 
 # INDIRECTION_COLUMN = 0
 # RID_COLUMN = 1
@@ -32,11 +33,28 @@ class Query:
     # Returns True upon succesful deletion
     # Return False if record doesn't exist or is locked due to 2PL
     """
-    def delete(self, primary_key):
+    def delete(self, primary_key, transaction=None):
         # get rid first
         rid = self.table.key_to_rid.get(primary_key, None)
         if rid is None:
             return False
+        
+        # Acquire locks and record logs
+        if transaction is not None:
+            lock_acquired = self.table.lock_manager.acquire_lock(
+                lock_id=rid,
+                lock_type=LockType.EXCLUSIVE,
+                transaction_id=transaction.transaction_id
+            )
+            if not lock_acquired:
+                return False
+            
+            transaction.log_operation(
+                table=self.table,
+                op_type='delete',
+                rollback_data={'rid': rid}
+            )
+            
         # delete the record from table
         self.table.delete_record_by_rid(rid)
         pass
@@ -47,11 +65,21 @@ class Query:
     # Return True upon succesful insertion
     # Returns False if insert fails for whatever reason
     """
-    def insert(self, *columns):
+    def insert(self, *columns, transaction=None):
         # # first 5 for rid, indirection, timestamp, schema, col start
 
         new_rid = self.table.page_directory.num_base_records
         new_timestamp = int(datetime.now().timestamp())
+        
+        # Accquire locks
+        if transaction is not None:
+            lock_acquired = self.table.lock_manager.acquire_lock(
+                lock_id=new_rid,
+                lock_type=LockType.EXCLUSIVE,
+                transaction_id=transaction.transaction_id
+            )
+            if not lock_acquired:
+                return False
 
         # add the record to table
         # res1 = self.table.add_record(columns, "Base")
@@ -62,6 +90,14 @@ class Query:
         # print(new_rid, columns)
         
         res2 = self.table.index.insert_value(columns, new_rid, "Base")
+        
+        # Record logs
+        if transaction is not None:
+            transaction.log_operation(
+                table=self.table,
+                op_type='insert',
+                rollback_data={'rid': new_rid}
+            )
 
         return res2
 
@@ -75,8 +111,8 @@ class Query:
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
     """
-    def select(self, search_key, search_key_index, projected_columns_index):
-        return self.select_version(search_key, search_key_index, projected_columns_index, 0)
+    def select(self, search_key, search_key_index, projected_columns_index, transaction=None):
+        return self.select_version(search_key, search_key_index, projected_columns_index, 0, transaction)
         
 
     
@@ -90,7 +126,7 @@ class Query:
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
     """
-    def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
+    def select_version(self, search_key, search_key_index, projected_columns_index, relative_version, transaction=None):
         # selected_rids = self.table.index.locate(search_key_index, search_key)
         rids_list = self.table.index.locate(search_key_index, search_key)
         # tmp_rid = [e[0] for e in rids_list]
@@ -99,6 +135,17 @@ class Query:
         
         # selected_rids = [selected_rids[0]]
         # print(f"Select version: search_key_index: {search_key_index}, search_key: {search_key}, selected_rids: {selected_rids}")
+        
+        # Acquire locks
+        if transaction is not None:
+            for rid in selected_rids:
+                lock_acquired = self.table.lock_manager.acquire_lock(
+                    lock_id=rid,
+                    lock_type=LockType.SHARED,
+                    transaction_id=transaction.transaction_id
+                )
+                if not lock_acquired:
+                    return False
 
         records_list = []
         for rid in selected_rids:
@@ -134,7 +181,7 @@ class Query:
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
     # issue exist
-    def update(self, primary_key, *columns):
+    def update(self, primary_key, *columns, transaction=None):
 
         # selected_rids = self.table.index.locate(self.table.key, primary_key)
        
@@ -148,6 +195,16 @@ class Query:
         
         # print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
         rid = selected_rids[0]
+        
+        # Acquire locks
+        if transaction is not None:
+            lock_acquired = self.table.lock_manager.acquire_lock(
+                lock_id=rid,
+                lock_type=LockType.EXCLUSIVE,
+                transaction_id=transaction.transaction_id
+            )
+            if not lock_acquired:
+                return False
 
         base_page_idx = rid // Config.PAGE_CAPACITY
         base_record_idx = rid % Config.PAGE_CAPACITY
@@ -155,6 +212,17 @@ class Query:
         base_indirection = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['indirection']
         base_schema = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['schema_encoding']
         base_rid = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['base_rid']
+        
+        # Record logs
+        if transaction is not None:
+            transaction.log_operation(
+                table=self.table,
+                op_type='update',
+                rollback_data={
+                    'rid': rid,
+                    'old_indirection': base_indirection
+                }
+            )
 
         # updated record columns
         updated_columns = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['columns']
@@ -180,7 +248,7 @@ class Query:
         # if has another update record, head insert, replace the current record 
         if base_indirection != -1:
         # if base_indirection != 0:
-            cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))])[0]
+            cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))], transaction)[0]
             
             # print("old record: ", cur_version_record.columns)
             
@@ -230,8 +298,8 @@ class Query:
     # Returns the summation of the given range upon success
     # Returns False if no record exists in the given range
     """
-    def sum(self, start_range, end_range, aggregate_column_index):
-        return self.sum_version(start_range, end_range, aggregate_column_index, 0)
+    def sum(self, start_range, end_range, aggregate_column_index, transaction=None):
+        return self.sum_version(start_range, end_range, aggregate_column_index, 0, transaction)
 
     
     """
@@ -243,12 +311,23 @@ class Query:
     # Returns the summation of the given range upon success
     # Returns False if no record exists in the given range
     """
-    def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
+    def sum_version(self, start_range, end_range, aggregate_column_index, relative_version, transaction=None):
         
         rids_list = self.table.index.locate_range(start_range, end_range, self.table.key)
         tmp_rid = [e[0] for e in rids_list]
         # selected_rids = [e[0] for e in rids_list]
         selected_rids = [x for row in tmp_rid for x in row]
+        
+        # Acquire locks
+        if transaction is not None:
+            for rid in selected_rids:
+                lock_acquired = self.table.lock_manager.acquire_lock(
+                    lock_id=rid,
+                    lock_type=LockType.SHARED,
+                    transaction_id=transaction.transaction_id
+                )
+                if not lock_acquired:
+                    return False
 
         # print(f"\n range: ({start_range}, {end_range}), sum func. selected_rids: {selected_rids}")
         res = 0
@@ -287,11 +366,11 @@ class Query:
     # Returns True is increment is successful
     # Returns False if no record matches key or if target record is locked by 2PL.
     """
-    def increment(self, key, column):
-        r = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
+    def increment(self, key, column, transaction=None):
+        r = self.select(key, self.table.key, [1] * self.table.num_columns, transaction)[0]
         if r is not False:
             updated_columns = [None] * self.table.num_columns
             updated_columns[column] = r[column] + 1
-            u = self.update(key, *updated_columns)
+            u = self.update(key, *updated_columns, transaction)
             return u
         return False

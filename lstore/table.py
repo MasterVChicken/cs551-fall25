@@ -3,7 +3,9 @@ from time import time
 from lstore.page import *
 from lstore.cache_policy import LRUCache
 from lstore.config import Config
+from lstore.lock_manager import LockManager
 from datetime import datetime
+import threading
 
 import math
 import copy
@@ -48,6 +50,8 @@ class PageRange:
         self.num_base_records = num_base_records
         self.num_tail_records = num_tail_records
         
+        self.lock = threading.Lock()
+        
     def _allocate_base_page(self):
         new_page = BasePage(self.num_columns)
         # self.base_pages.append(new_page)
@@ -86,34 +90,37 @@ class PageRange:
         return False if self.current_tail_page == None else self.current_tail_page.has_capacity()
     
     def insert_base_record(self, rid, timestamp, columns):
-        if not self.has_base_capacity():
-            self._allocate_base_page()
+        with self.lock:
+            if not self.has_base_capacity():
+                self._allocate_base_page()
         
-        success = self.current_base_page.insert_record(rid, timestamp, columns)
-        if success:
-            # We need to re-write the index part
-            # page_index = len(self.base_pages) - 1
-            page_index = self.num_base_records // Config.PAGE_CAPACITY
-            record_index = self.current_base_page.num_records - 1
-            self.num_base_records += 1
-            return (page_index, record_index)
-        return None
+            success = self.current_base_page.insert_record(rid, timestamp, columns)
+            if success:
+                # We need to re-write the index part
+                # page_index = len(self.base_pages) - 1
+                page_index = self.num_base_records // Config.PAGE_CAPACITY
+                record_index = self.current_base_page.num_records - 1
+                self.num_base_records += 1
+                return (page_index, record_index)
+            return None
+        
     
     # Some specical prpcess here I think?
     def append_tail_record(self, rid, indirection, timestamp, schema_encoding, base_rid, columns):
-        if not self.has_tail_capacity():
-            self._allocate_tail_page()
+        with self.lock:
+            if not self.has_tail_capacity():
+                self._allocate_tail_page()
         
-        success = self.current_tail_page.append_update(
-            rid, indirection, timestamp, schema_encoding, base_rid, columns
-        )
-        if success:
-            # page_index = len(self.tail_pages) - 1
-            page_index = self.num_tail_records // Config.PAGE_CAPACITY
-            record_index = self.current_tail_page.num_records - 1
-            self.num_tail_records += 1
-            return (page_index, record_index)
-        return None
+            success = self.current_tail_page.append_update(
+                rid, indirection, timestamp, schema_encoding, base_rid, columns
+            )
+            if success:
+                # page_index = len(self.tail_pages) - 1
+                page_index = self.num_tail_records // Config.PAGE_CAPACITY
+                record_index = self.current_tail_page.num_records - 1
+                self.num_tail_records += 1
+                return (page_index, record_index)
+            return None
     
     def read_base_record(self, page_index, record_index):
         # if page_index >= len(self.base_pages):
@@ -446,6 +453,8 @@ class Table:
         # ***** new added
         self.key_to_rid = {} # primary key value -> rid mapping
         
+        self.lock_manager = LockManager()
+        
         pass
     
     def get_version_rid(self, rid, relative_version):
@@ -668,4 +677,14 @@ class Table:
     def close(self):
         # save all records
         self.page_directory.save_to_disk()
+        pass
+    
+    # TODO: Write the following rollback logic
+    def rollback_insert(self, rid):
+        pass
+    
+    def rollback_update(self, rid, old_indirection):
+        pass
+    
+    def rollback_delete(self, rid):
         pass

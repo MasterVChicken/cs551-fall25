@@ -1,6 +1,7 @@
 from lstore.table import Table, Record
 from lstore.index import Index
 import threading
+import traceback
 
 class Transaction:
     # We follow the designs for Strict Strong 2PL lock
@@ -12,7 +13,7 @@ class Transaction:
     def __init__(self):
         self.queries = []
         
-        with Transaction._id_lock:
+        with Transaction.id_lock:
             Transaction.transaction_id_counter += 1
             self.transaction_id = Transaction.transaction_id_counter
         
@@ -44,9 +45,7 @@ class Transaction:
         try:
             for query, table, args in self.queries:
                 # Query will try to acquire necessary locks and return corresponding results
-                result = query(*args, 
-                              transaction_id=self.transaction_id, 
-                              transaction=self)
+                result = query(*args, transaction=self)
                 
                 # NO-WAIT Policy: Abort immediately on lock failure
                 if result == False:
@@ -57,7 +56,6 @@ class Transaction:
             
         except Exception as e:
             print(f"Transaction {self.transaction_id} exception: {e}")
-            import traceback
             traceback.print_exc()
             return self.abort()
     

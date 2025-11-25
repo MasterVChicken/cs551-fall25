@@ -4,6 +4,7 @@ A data strucutre holding indices for various columns of a table. Key column shou
 
 from collections import OrderedDict
 from lstore.config import Config
+import threading
 
 # INDIRECTION_COLUMN = 0
 # RID_COLUMN = 1
@@ -46,6 +47,8 @@ class Index:
         self.table = table
 
         self.create_index(self.table.key, "Base")
+        
+        self.lock = threading.Lock()
         pass
         
     """
@@ -126,11 +129,13 @@ class Index:
         return True
     
     def insert_value(self, columns, rid, page_tye):
-        for col_idx, col_value in enumerate(columns):
-            if self.indices[col_idx] != None:
-                # print(col_idx, col_value, rid)
-                self.indices[col_idx].add(col_value, rid, page_tye)
-        return True
+        with self.lock:
+            for col_idx, col_value in enumerate(columns):
+                if self.indices[col_idx] != None:
+                    # print(col_idx, col_value, rid)
+                    self.indices[col_idx].add(col_value, rid, page_tye)
+            return True
     
     def update_index(self, column_number, key, value, page_tye):
-        self.indices[column_number].add(key, value, page_tye)
+        with self.lock:
+            self.indices[column_number].add(key, value, page_tye)
