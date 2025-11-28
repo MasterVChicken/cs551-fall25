@@ -681,10 +681,32 @@ class Table:
     
     # TODO: Write the following rollback logic
     def rollback_insert(self, rid):
+        """
+        Undoes an insert operation.
+        1. Removes the RID from the page directory.
+        2. Removes the RID from the index.
+        """
+        # Validate RID exists (it should, if the log is correct)
+        if rid not in self.page_directory:
+            return
+
+        del self.page_directory[rid]
+        
+        # TODO: Remove from index
         pass
+        
     
     def rollback_update(self, rid, old_indirection):
-        pass
+        """
+        Undoes an update operation.
+        1. Locates the base record using RID.
+        2. Reverts the INDIRECTION column to point to 'old_indirection'.
+        """
+        if rid not in self.page_directory:
+            return
+
+        # Get location of the Base Record
+        page_range_index, page_index, offset = self.page_directory[rid]
     
     def rollback_delete(self, rid):
         pass
