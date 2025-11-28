@@ -1,5 +1,6 @@
 import threading
 from enum import Enum
+import unittest
 
 class LockType(Enum):
     SHARED = 1
@@ -83,3 +84,84 @@ class LockManager:
             
             for lock_id in lock_ids_to_remove:
                 del self.locks[lock_id]
+                
+                
+class TestLockManager(unittest.TestCase):
+    def setUp(self):
+        self.lm = LockManager()
+
+    def test_basic_shared_shared(self):
+        """test1: multiple shared locks allowed"""
+        print("\nRunning: test_basic_shared_shared")
+        self.assertTrue(self.lm.acquire_lock('A', LockType.SHARED, 'T1'))
+        self.assertTrue(self.lm.acquire_lock('A', LockType.SHARED, 'T2'))
+        
+        # verify both holders exist
+        self.assertEqual(len(self.lm.locks['A']['holders']), 2)
+        self.assertEqual(self.lm.locks['A']['type'], LockType.SHARED)
+
+    def test_exclusive_conflict(self):
+        """test2: exclusive locks should conflict"""
+        print("\nRunning: test_exclusive_conflict")
+        # T1 obtains EXCLUSIVE lock
+        self.assertTrue(self.lm.acquire_lock('A', LockType.EXCLUSIVE, 'T1'))
+
+        # T2 attempts to obtain EXCLUSIVE lock -> fails
+        self.assertFalse(self.lm.acquire_lock('A', LockType.EXCLUSIVE, 'T2'))
+        # T2 attempts to obtain SHARED lock -> fails
+        self.assertFalse(self.lm.acquire_lock('A', LockType.SHARED, 'T2'))
+
+    def test_lock_upgrade_success(self):
+        """test3: lock upgrade should succeed when no other holders"""
+        print("\nRunning: test_lock_upgrade_success")
+
+        # T1 obtains SHARED lock
+        self.assertTrue(self.lm.acquire_lock('A', LockType.SHARED, 'T1'))
+
+        # T1 attempts to upgrade to EXCLUSIVE lock
+        # Expected: succeeds, because T1 is the only holder
+        success = self.lm.acquire_lock('A', LockType.EXCLUSIVE, 'T1')
+        self.assertTrue(success)
+
+        # Verify lock type has changed to EXCLUSIVE
+        self.assertEqual(self.lm.locks['A']['type'], LockType.EXCLUSIVE)
+
+        # Verify T2 cannot obtain lock
+        self.assertFalse(self.lm.acquire_lock('A', LockType.SHARED, 'T2'))
+
+    def test_lock_upgrade_fail_due_to_others(self):
+        """test4: lock upgrade should fail when other holders exist"""
+        print("\nRunning: test_lock_upgrade_fail_due_to_others")
+
+        # 1. T1 obtains SHARED lock
+        self.assertTrue(self.lm.acquire_lock('A', LockType.SHARED, 'T1'))
+        # 2. T2 also obtains SHARED lock
+        self.assertTrue(self.lm.acquire_lock('A', LockType.SHARED, 'T2'))
+
+        # 3. T1 attempts to upgrade to EXCLUSIVE lock
+        # Expected: fails (False). Because T2 is still reading, T1 cannot write, and NO-WAIT does not allow waiting
+        success = self.lm.acquire_lock('A', LockType.EXCLUSIVE, 'T1')
+        self.assertFalse(success)
+
+        # 4. Verify lock type has not changed
+        self.assertEqual(self.lm.locks['A']['type'], LockType.SHARED)
+
+    def test_release_allows_upgrade(self):
+        """test5: lock upgrade should succeed after other readers release"""
+        print("\nRunning: test_release_allows_upgrade")
+        
+        self.lm.acquire_lock('A', LockType.SHARED, 'T1')
+        self.lm.acquire_lock('A', LockType.SHARED, 'T2')
+
+        # T1 attempts to upgrade to EXCLUSIVE lock
+        self.assertFalse(self.lm.acquire_lock('A', LockType.EXCLUSIVE, 'T1'))
+
+        # T2 releases lock
+        self.lm.release_lock('A', 'T2')
+
+        # T1 attempts to upgrade -> should succeed
+        self.assertTrue(self.lm.acquire_lock('A', LockType.EXCLUSIVE, 'T1'))
+        self.assertEqual(self.lm.locks['A']['type'], LockType.EXCLUSIVE)
+
+if __name__ == '__main__':
+    unittest.main()
