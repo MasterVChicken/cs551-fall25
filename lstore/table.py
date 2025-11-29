@@ -686,15 +686,29 @@ class Table:
         1. Removes the RID from the page directory.
         2. Removes the RID from the index.
         """
-        # Validate RID exists (it should, if the log is correct)
-        if rid not in self.page_directory:
-            return
-
-        del self.page_directory[rid]
+        page_idx = rid // Config.PAGE_CAPACITY
+        record_idx = rid % Config.PAGE_CAPACITY
         
-        # TODO: Remove from index
-        pass
+        # get record to find key value
+        record = self.page_directory.read_base_record(page_idx, record_idx)
+        if record:
+            columns = record['columns']
+            key_value = record['columns'][self.key]
+            
+            # remove from index
+            if self.index:
+                self.index.remove_from_index(rid, columns)
+            
+            # remove from page directory
+            self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
+            # remove from key_to_rid mapping
+            if key_value in self.key_to_rid:
+                del self.key_to_rid[key_value]
         
+        self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
+        # indirection
+        self.page_directory.update_base_indirection(page_idx, record_idx, 0)
+    
     
     def rollback_update(self, rid, old_indirection):
         """
