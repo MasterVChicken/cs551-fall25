@@ -723,4 +723,28 @@ class Table:
         self.page_directory.update_base_indirection(page_idx, record_idx, old_indirection)
     
     def rollback_delete(self, rid):
+        """
+        Undoes a delete operation.
+        1. Locates the record using RID.
+        2. Restores the RID column to its original value.
+        """
+        page_idx = rid // Config.PAGE_CAPACITY
+        record_idx = rid % Config.PAGE_CAPACITY
+        
+        # restore RID column to original value
+        self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, rid)
+        
+        # TODO: restore Indirection
         pass
+    
+        # restore index
+        record = self.page_directory.read_base_record(page_idx, record_idx)
+        if record:
+            key_value = record['columns'][self.key]
+            
+            # insert into index
+            # Question: base or tail?
+            if self.index:
+                self.index.insert_value(record['columns'], rid, "Base")
+            self.key_to_rid[key_value] = rid
+            
