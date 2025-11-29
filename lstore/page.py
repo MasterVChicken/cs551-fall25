@@ -60,7 +60,7 @@ class Page:
         return self.data
     
     def set_data(self, data, num_items):
-        self.data = data
+        self.data = bytearray(data)
         self.num_items = num_items
         
 
