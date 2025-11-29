@@ -48,6 +48,11 @@ class OrderedDictList:
     
     # remove rid from key
     def remove_rid(self, key, rid):
+        """
+        Remove the given rid from the lists associated with the key.
+        If both lists become empty after removal, the key is deleted from the data.
+        Returns True if the rid was found and removed, False otherwise.
+        """
         if key in self.data:
             if rid in self.data[key][0]:
                 self.data[key][0].remove(rid)
@@ -159,3 +164,14 @@ class Index:
     def update_index(self, column_number, key, value, page_tye):
         with self.lock:
             self.indices[column_number].add(key, value, page_tye)
+            
+            
+    def remove_from_index(self, rid, columns):
+        """
+        Remove the given rid from the index for the specified columns.
+        """
+        with self.lock:
+            for col_idx, col_value in enumerate(columns):
+                if self.indices[col_idx] != None:
+                    self.indices[col_idx].remove_rid(col_value, rid)
+            return True
