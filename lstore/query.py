@@ -129,6 +129,11 @@ class Query:
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version, transaction=None):
         # selected_rids = self.table.index.locate(search_key_index, search_key)
         rids_list = self.table.index.locate(search_key_index, search_key)
+        
+        # return empty if no record found
+        if rids_list is None:
+            return []
+        
         # tmp_rid = [e[0] for e in rids_list]
         # selected_rids = [x for row in tmp_rid for x in row]
         selected_rids = rids_list[0]
