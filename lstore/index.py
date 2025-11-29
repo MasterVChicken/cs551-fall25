@@ -85,8 +85,12 @@ class Index:
             ValueError('Invalid column index')
         
         if self.indices[column]:
-            res = self.indices[column].data[value]
-            # print('locate func: ', value, res)
+            print(self.indices[column].data)
+            try:
+                res = self.indices[column].data[value]
+                # print('locate func: ', value, res)
+            except KeyError:
+                res = None
             return res
         else:
             return None
