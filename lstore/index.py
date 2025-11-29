@@ -15,6 +15,13 @@ import threading
 
 # data structure used to store the index
 class OrderedDictList:
+    """
+        self.data = {
+            key1: [[base_rid1, base_rid2, ...], [tail_rid1, tail_rid2, ...]],
+            key2: [[base_rid3, base_rid4, ...], [tail_rid3, tail_rid4, ...]],
+            ...
+        }
+    """
     def __init__(self):
          self.data = OrderedDict()
     
@@ -38,6 +45,19 @@ class OrderedDictList:
             if begin <= key <= end:
                 res.append(self.data[key])
         return res
+    
+    # remove rid from key
+    def remove_rid(self, key, rid):
+        if key in self.data:
+            if rid in self.data[key][0]:
+                self.data[key][0].remove(rid)
+            if rid in self.data[key][1]:
+                self.data[key][1].remove(rid)
+            # if both base and tail lists are empty, remove the key
+            if not self.data[key][0] and not self.data[key][1]:
+                del self.data[key]
+            return True
+        return False
 
 class Index:
 
