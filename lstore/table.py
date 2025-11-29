@@ -716,11 +716,11 @@ class Table:
         1. Locates the base record using RID.
         2. Reverts the INDIRECTION column to point to 'old_indirection'.
         """
-        if rid not in self.page_directory:
-            return
-
-        # Get location of the Base Record
-        page_range_index, page_index, offset = self.page_directory[rid]
+        page_idx = rid // Config.PAGE_CAPACITY
+        record_idx = rid % Config.PAGE_CAPACITY
+        
+        # update indirection to old_indirection
+        self.page_directory.update_base_indirection(page_idx, record_idx, old_indirection)
     
     def rollback_delete(self, rid):
         pass
