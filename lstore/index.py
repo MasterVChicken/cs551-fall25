@@ -85,7 +85,7 @@ class Index:
             ValueError('Invalid column index')
         
         if self.indices[column]:
-            print(self.indices[column].data)
+            # print(111, self.indices[column].data)
             try:
                 res = self.indices[column].data[value]
                 # print('locate func: ', value, res)
@@ -112,7 +112,7 @@ class Index:
     # optional: Create index on specific column
     """
 
-    def create_index(self, column_number, page_tye):
+    def create_index(self, column_number, page_tye="Base"):
         # print("creat index begin")
         if self.indices[column_number]:
             raise ValueError(f"Key {column_number} already has a index")
