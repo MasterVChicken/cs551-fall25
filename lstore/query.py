@@ -354,11 +354,28 @@ class Query:
 
         updated_columns = base_record['columns'].copy()
 
-        if base_indirection != -1:
-            cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))], transaction)[0]
-            for i in range(len(columns)):
-                if ((base_schema >> i) & 1):
-                    updated_columns[i] = cur_version_record.columns[i]
+        if base_indirection != -1:            
+            # get the latest rid (version 0)
+            latest_rid, page_type = self.table.get_version_rid(rid, 0)
+            
+            # get record from latest rid
+            if page_type == 'Base':
+                latest_record = self.table.page_directory.read_base_record(
+                    latest_rid // Config.PAGE_CAPACITY, 
+                    latest_rid % Config.PAGE_CAPACITY
+                )
+            else:
+                latest_record = self.table.page_directory.read_tail_record(
+                    latest_rid // Config.PAGE_CAPACITY, 
+                    latest_rid % Config.PAGE_CAPACITY
+                )
+            
+            if latest_record:
+                latest_columns = latest_record['columns']
+                for i in range(len(columns)):
+                    # if the column is not updated in the latest record, use the latest value
+                    if ((base_schema >> i) & 1):
+                        updated_columns[i] = latest_columns[i]
         
         updated_schema = base_schema
         for i in range(len(columns)):
