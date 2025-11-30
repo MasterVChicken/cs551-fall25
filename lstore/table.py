@@ -549,6 +549,56 @@ class Table:
     #     elif indirection == -1:
     #         return rid, 'Base'
     
+    # def get_version_rid(self, rid, relative_version):
+    #     page_idx = rid // Config.PAGE_CAPACITY
+    #     record_idx = rid % Config.PAGE_CAPACITY
+
+    #     # Read base record
+    #     base_record = self.page_directory.read_base_record(page_idx, record_idx)
+    #     if base_record is None:
+    #         return rid, 'Base'
+        
+    #     indirection = base_record['indirection']
+
+    #     # If no update records
+    #     if indirection == -1:
+    #         return rid, 'Base'
+        
+    #     # relative_version = 0 
+    #     if relative_version == 0:
+    #         return indirection, 'Tail'
+        
+    #     # relative_version = -1 
+    #     if relative_version == -1:
+    #         return rid, 'Base'
+        
+    #     tail_rids = []
+    #     current_tail_rid = indirection
+        
+    #     while current_tail_rid != -1:
+    #         tail_rids.append(current_tail_rid)
+            
+    #         tail_page_idx = current_tail_rid // Config.PAGE_CAPACITY
+    #         tail_record_idx = current_tail_rid % Config.PAGE_CAPACITY
+            
+    #         tail_record = self.page_directory.read_tail_record(tail_page_idx, tail_record_idx)
+    #         if tail_record is None:
+    #             break
+            
+    #         current_tail_rid = tail_record['indirection']
+        
+    #     total_versions = 1 + len(tail_rids)
+        
+    #     target_index = -relative_version - 1  # -1->0, -2->1, -3->2, ...
+        
+    #     if target_index >= total_versions:
+    #         return rid, 'Base'
+        
+    #     if target_index == 0:
+    #         return rid, 'Base'
+    #     else:
+    #         tail_index = len(tail_rids) - target_index
+    #         return tail_rids[tail_index], 'Tail'
     def get_version_rid(self, rid, relative_version):
         page_idx = rid // Config.PAGE_CAPACITY
         record_idx = rid % Config.PAGE_CAPACITY
@@ -560,18 +610,15 @@ class Table:
         
         indirection = base_record['indirection']
 
-        # If no update records
+        # if no update records
         if indirection == -1:
             return rid, 'Base'
         
-        # relative_version = 0 
+        # if relative_version == 0, which means the latest version, return indirection
         if relative_version == 0:
             return indirection, 'Tail'
-        
-        # relative_version = -1 
-        if relative_version == -1:
-            return rid, 'Base'
-        
+            
+        # collect all tail rids, from latest to oldest
         tail_rids = []
         current_tail_rid = indirection
         
@@ -587,18 +634,16 @@ class Table:
             
             current_tail_rid = tail_record['indirection']
         
-        total_versions = 1 + len(tail_rids)
+        # calculate depth, absolute value, 
+        depth = abs(relative_version)
         
-        target_index = -relative_version - 1  # -1->0, -2->1, -3->2, ...
-        
-        if target_index >= total_versions:
-            return rid, 'Base'
-        
-        if target_index == 0:
-            return rid, 'Base'
+        if depth < len(tail_rids):
+            # if the depth is within the Tail chain, return the corresponding tail rid
+            return tail_rids[depth], 'Tail'
         else:
-            tail_index = len(tail_rids) - target_index
-            return tail_rids[tail_index], 'Tail'
+            # if the depth exceeds the Tail chain (e.g., 1 update, request v-1 or v-2),
+            # it means the version is in the Base Page.
+            return rid, 'Base'
 
     # may exist issues, change to read_tail_record and read_base_record
     def get_col_value(self, rid, column_idx, page_type = 'Base'):
