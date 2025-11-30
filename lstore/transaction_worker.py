@@ -46,4 +46,3 @@ class TransactionWorker:
             self.stats.append(transaction.run())
         # stores the number of transactions that committed
         self.result = len(list(filter(lambda x: x, self.stats)))
-

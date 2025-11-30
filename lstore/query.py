@@ -60,8 +60,50 @@ class Query:
     #     pass
 
     # testM2
-    def delete(self, primary_key):
+    def delete(self, primary_key, transaction=None):
+        # self.table.delete(primary_key)
+        
+        # Yanliang's Modification here: acquire lock, log, transaction
+        rids_list = self.table.index.locate(self.table.key, primary_key)
+        selected_rids = rids_list[0]
+        
+        if selected_rids is None or len(selected_rids) == 0:
+            return False
+        
+        rid = selected_rids[0]
+        
+        # Save info before deletion
+        page_idx = rid // Config.PAGE_CAPACITY
+        record_idx = rid % Config.PAGE_CAPACITY
+        record = self.table.page_directory.read_base_record(page_idx, record_idx)
+    
+        if record is None:
+            return False
+        
+        old_indirection = record['indirection']
+        old_columns = record['columns']
+        
+        if transaction is not None:
+            lock_acquired = self.table.lock_manager.acquire_lock(
+                lock_id=rid,
+                lock_type=LockType.EXCLUSIVE,
+                transaction_id=transaction.transaction_id
+            )
+            if not lock_acquired:
+                return False
+            
+            transaction.log_operation(
+                table=self.table,
+                op_type='delete',
+                rollback_data={
+                'rid': rid,
+                'old_indirection': old_indirection, 
+                'old_columns': old_columns
+            }
+            )
+        
         self.table.delete(primary_key)
+        return True
     
     
     """
@@ -71,9 +113,24 @@ class Query:
     """
     def insert(self, *columns, transaction=None):
         # # first 5 for rid, indirection, timestamp, schema, col start
+        
+        # Check if the primary key already exists
+        primary_key_value = columns[self.table.key]
+        rids_list = self.table.index.locate(self.table.key, primary_key_value)
+        if rids_list is not None and len(rids_list[0]) > 0:
+            # Primary key already exists
+            # Refuse to insert
+            return False
 
-        new_rid = self.table.page_directory.num_base_records
+        # new_rid = self.table.page_directory.num_base_records
         new_timestamp = int(datetime.now().timestamp())
+        
+        # Allocate rid atomically and insert under lock protection
+        result = self.table.page_directory.insert_base_record_with_rid_alloc(new_timestamp, columns)
+        if result is None:
+            return False
+        
+        new_rid, page_index, record_index = result
         
         # Accquire locks
         if transaction is not None:
@@ -84,24 +141,29 @@ class Query:
             )
             if not lock_acquired:
                 return False
-
-        # add the record to table
-        # res1 = self.table.add_record(columns, "Base")
-        res1 = self.table.page_directory.insert_base_record(new_rid, new_timestamp, columns)
-        if res1 == None:
-            return False
-
-        # print(new_rid, columns)
-        
-        res2 = self.table.index.insert_value(columns, new_rid, "Base")
-        
-        # Record logs
-        if transaction is not None:
             transaction.log_operation(
                 table=self.table,
                 op_type='insert',
                 rollback_data={'rid': new_rid}
             )
+
+        # # add the record to table
+        # # res1 = self.table.add_record(columns, "Base")
+        # res1 = self.table.page_directory.insert_base_record(new_rid, new_timestamp, columns)
+        # if res1 == None:
+        #     return False
+
+        # # print(new_rid, columns)
+        
+        res2 = self.table.index.insert_value(columns, new_rid, "Base")
+        
+        # # Record logs
+        # if transaction is not None:
+        #     transaction.log_operation(
+        #         table=self.table,
+        #         op_type='insert',
+        #         rollback_data={'rid': new_rid}
+        #     )
 
         return res2
 
@@ -130,22 +192,74 @@ class Query:
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
     """
+    # def select_version(self, search_key, search_key_index, projected_columns_index, relative_version, transaction=None):
+    #     # selected_rids = self.table.index.locate(search_key_index, search_key)
+    #     rids_list = self.table.index.locate(search_key_index, search_key)
+        
+    #     # return empty if no record found
+    #     if rids_list is None:
+    #         return []
+        
+    #     # tmp_rid = [e[0] for e in rids_list]
+    #     # selected_rids = [x for row in tmp_rid for x in row]
+    #     selected_rids = rids_list[0]
+        
+    #     # selected_rids = [selected_rids[0]]
+    #     # print(f"Select version: search_key_index: {search_key_index}, search_key: {search_key}, selected_rids: {selected_rids}")
+        
+    #     # Acquire locks
+    #     if transaction is not None:
+    #         for rid in selected_rids:
+    #             lock_acquired = self.table.lock_manager.acquire_lock(
+    #                 lock_id=rid,
+    #                 lock_type=LockType.SHARED,
+    #                 transaction_id=transaction.transaction_id
+    #             )
+    #             if not lock_acquired:
+    #                 return False
+
+    #     records_list = []
+    #     for rid in selected_rids:
+    #         version_rid, page_type = self.table.get_version_rid(rid, relative_version)
+    #         res_col = []
+    #         for col_idx, projected_value in enumerate(projected_columns_index):
+    #             # if projected_value is 1, get data of this column from base page
+    #             if projected_value:
+    #                 col_value = self.table.page_directory.read_base_record(rid//Config.PAGE_CAPACITY, rid%Config.PAGE_CAPACITY)['columns'][col_idx]
+    #                 res_col.append(col_value)
+    #             # for 0 value, should we append None?
+    #             # else:
+    #             #     res_col.appned()
+
+    #         # get data matched the relative version from base value
+    #         # print("get_version: ", rid)
+    #         next_rid, page_type = self.table.get_version_rid(rid, relative_version)
+
+    #         if page_type == 'Tail':
+    #             # need to edit schema?
+    #             for col_idx in range(len(projected_columns_index)):
+    #                 col_value = self.table.page_directory.read_tail_record(next_rid//Config.PAGE_CAPACITY, next_rid%Config.PAGE_CAPACITY)['columns'][col_idx]
+    #                 res_col[col_idx] = col_value
+
+    #         # record = Record(next_rid, self.table.key, res_col)
+    #         # records_list.append(record)
+    #         # testM2
+    #         if res_col[search_key_index] == search_key:
+    #             record = Record(next_rid, self.table.key, res_col) 
+    #             records_list.append(record)
+        
+    #     return records_list
+    
+    
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version, transaction=None):
-        # selected_rids = self.table.index.locate(search_key_index, search_key)
         rids_list = self.table.index.locate(search_key_index, search_key)
         
-        # return empty if no record found
         if rids_list is None:
             return []
         
-        # tmp_rid = [e[0] for e in rids_list]
-        # selected_rids = [x for row in tmp_rid for x in row]
         selected_rids = rids_list[0]
         
-        # selected_rids = [selected_rids[0]]
-        # print(f"Select version: search_key_index: {search_key_index}, search_key: {search_key}, selected_rids: {selected_rids}")
-        
-        # Acquire locks
+        # 获取锁
         if transaction is not None:
             for rid in selected_rids:
                 lock_acquired = self.table.lock_manager.acquire_lock(
@@ -158,32 +272,32 @@ class Query:
 
         records_list = []
         for rid in selected_rids:
+            version_rid, page_type = self.table.get_version_rid(rid, relative_version)
+            
             res_col = []
-            for col_idx, projected_value in enumerate(projected_columns_index):
-                # if projected_value is 1, get data of this column from base page
-                if projected_value:
-                    col_value = self.table.page_directory.read_base_record(rid//Config.PAGE_CAPACITY, rid%Config.PAGE_CAPACITY)['columns'][col_idx]
-                    res_col.append(col_value)
-                # for 0 value, should we append None?
-                # else:
-                #     res_col.appned()
-
-            # get data matched the relative version from base value
-            # print("get_version: ", rid)
-            next_rid, page_type = self.table.get_version_rid(rid, relative_version)
-
-            if page_type == 'Tail':
-                # need to edit schema?
-                for col_idx in range(len(projected_columns_index)):
-                    col_value = self.table.page_directory.read_tail_record(next_rid//Config.PAGE_CAPACITY, next_rid%Config.PAGE_CAPACITY)['columns'][col_idx]
-                    res_col[col_idx] = col_value
-
-            # record = Record(next_rid, self.table.key, res_col)
-            # records_list.append(record)
-            # testM2
+            if page_type == 'Base':
+                record = self.table.page_directory.read_base_record(
+                    version_rid // Config.PAGE_CAPACITY,
+                    version_rid % Config.PAGE_CAPACITY
+                )
+            else:
+                record = self.table.page_directory.read_tail_record(
+                    version_rid // Config.PAGE_CAPACITY,
+                    version_rid % Config.PAGE_CAPACITY
+                )
+            
+            if record is None:
+                continue
+            
+            columns = record['columns']
+            
+            for col_idx, projected in enumerate(projected_columns_index):
+                if projected:
+                    res_col.append(columns[col_idx])
+            
             if res_col[search_key_index] == search_key:
-                record = Record(next_rid, self.table.key, res_col) 
-                records_list.append(record)
+                record_obj = Record(version_rid, self.table.key, res_col)
+                records_list.append(record_obj)
         
         return records_list
 
@@ -193,36 +307,22 @@ class Query:
     # Returns True if update is succesful
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
-    # issue exist
     def update(self, primary_key, *columns, transaction=None):
-
-        # selected_rids = self.table.index.locate(self.table.key, primary_key)
-       
-        # rids_list = self.table.index.locate(self.table.key, primary_key)
-        # # tmp_rid = [e[0] for e in rids_list]
-        # # selected_rids = [x for row in tmp_rid for x in row]
-        # selected_rids = rids_list[0]
-
-        # if selected_rids == None:
-        #     return False
-        
-        # # print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
-        # rid = selected_rids[0]
-
-        # testM2M1
         rids_list = self.table.index.locate(self.table.key, primary_key)
         selected_rids = rids_list[0]
         if selected_rids == None or len(selected_rids) > 1 or len(selected_rids) == 0:
             return False
         rid = selected_rids[0]
 
+        # Check uniqueness
         update_primary_key = columns[self.table.key]
-        rids_list = self.table.index.locate(self.table.key, update_primary_key)
-        selected_rids = rids_list[0]
-        if selected_rids == None or len(selected_rids) > 0:
-            return False
+        if update_primary_key is not None and update_primary_key != primary_key:
+            rids_list = self.table.index.locate(self.table.key, update_primary_key)
+            selected_rids = rids_list[0]
+            if selected_rids is not None and len(selected_rids) > 0:
+                return False
         
-        # Acquire locks
+        # acquire locks
         if transaction is not None:
             lock_acquired = self.table.lock_manager.acquire_lock(
                 lock_id=rid,
@@ -235,83 +335,67 @@ class Query:
         base_page_idx = rid // Config.PAGE_CAPACITY
         base_record_idx = rid % Config.PAGE_CAPACITY
 
-        base_indirection = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['indirection']
-        base_schema = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['schema_encoding']
-        base_rid = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['base_rid']
+        base_record = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)
+        base_indirection = base_record['indirection']
+        base_schema = base_record['schema_encoding']
+        base_rid = base_record['base_rid']
         
-        # Record logs
+        # record logs
         if transaction is not None:
             transaction.log_operation(
                 table=self.table,
                 op_type='update',
                 rollback_data={
                     'rid': rid,
-                    'old_indirection': base_indirection
+                    'old_indirection': base_indirection,
+                    'old_primary_key': primary_key if update_primary_key != primary_key else None  # 新增
                 }
             )
 
-        # updated record columns
-        updated_columns = self.table.page_directory.read_base_record(base_page_idx, base_record_idx)['columns']
-        # print(f"base_ind: {base_indirection}, base_schema: {base_schema}, init columns: {updated_columns}")
+        updated_columns = base_record['columns'].copy()
 
-        # indirection for the updated record
-        updated_indirection = base_indirection
-        # rid for the updated record
-        updated_rid = self.table.page_directory.num_tail_records
-        # timestamp for the updated record
-        updated_timestamp = int(datetime.now().timestamp())
-        # updated base rid
-        updated_base_rid = base_rid
-        # # schema for the updated record
-        # updated_schema = base_schema
-        # for i in range(len(columns)):
-        #     if columns[i] != None:
-        #         updated_columns[i] = columns[i]
-        #         updated_schema = (updated_schema | (1 << i))
-
-        # # print("from input columns: ", updated_columns)
-
-        # if has another update record, head insert, replace the current record 
         if base_indirection != -1:
-        # if base_indirection != 0:
             cur_version_record = self.select(primary_key, self.table.key, [1 for _ in range(len(columns))], transaction)[0]
-            
-            # print("old record: ", cur_version_record.columns)
-            
             for i in range(len(columns)):
-                # find the updated columns
                 if ((base_schema >> i) & 1):
-                    # print("   updated col idx: ", i)
                     updated_columns[i] = cur_version_record.columns[i]
         
-        # print("from existed tailed columns: ", updated_columns)
-
-        # schema for the updated record
         updated_schema = base_schema
         for i in range(len(columns)):
-            if columns[i] != None:
+            if columns[i] is not None:
                 updated_columns[i] = columns[i]
                 updated_schema = (updated_schema | (1 << i))
 
-        # print("from input columns: ", updated_columns)
+        updated_indirection = base_indirection
+        updated_timestamp = int(datetime.now().timestamp())
+        updated_base_rid = base_rid
+        
+        # create tail record
+        result = self.table.page_directory.append_tail_record_with_rid_alloc(
+            updated_indirection, 
+            updated_timestamp, 
+            updated_schema, 
+            updated_base_rid, 
+            updated_columns
+        )
+        
+        if result is None:
+            return False
+        
+        updated_rid, tail_page_index, tail_record_index = result
 
-        # add the updated record to tail page
-        self.table.page_directory.append_tail_record(updated_rid, updated_indirection, updated_timestamp, updated_schema, updated_base_rid, updated_columns)
-
-        # update the base page
+        # update base record
         self.table.page_directory.update_base_indirection(base_page_idx, base_record_idx, updated_rid)
         self.table.page_directory.update_base_schema_encoding(base_page_idx, base_record_idx, updated_schema)
-        # do we need to update the timestamp for base page?
 
-        # update the index for the updated record
-        # print(f'Before update index: primary_key_idx: {self.table.key}, primary_key_value: {primary_key}, updated_record_rid: {updated_rid}')
-        self.table.index.update_index(self.table.key, primary_key, updated_rid, "Tail")
-
-        # # merge add here
-        # merge_threshold = 15
-        # if (self.table.page_directory.num_tail_records // Config.PAGE_CAPACITY) % merge_threshold == 0:
-        #     # print("Call merge")
-        #     self.table.merge()
+        # Update index only when the primary key changes
+        if update_primary_key is not None and update_primary_key != primary_key:
+            # Remove old primary key
+            if self.table.index.indices[self.table.key]:
+                self.table.index.indices[self.table.key].remove_rid(primary_key, rid)
+            # Add new primary key
+            if self.table.index.indices[self.table.key]:
+                self.table.index.indices[self.table.key].add(update_primary_key, rid, "Base")
 
         return True
 

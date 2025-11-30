@@ -53,16 +53,26 @@ class OrderedDictList:
         If both lists become empty after removal, the key is deleted from the data.
         Returns True if the rid was found and removed, False otherwise.
         """
-        if key in self.data:
-            if rid in self.data[key][0]:
-                self.data[key][0].remove(rid)
-            if rid in self.data[key][1]:
-                self.data[key][1].remove(rid)
-            # if both base and tail lists are empty, remove the key
-            if not self.data[key][0] and not self.data[key][1]:
-                del self.data[key]
-            return True
-        return False
+        if key not in self.data:
+            return False
+        
+        removed = False
+        
+        # Remove from base
+        if rid in self.data[key][0]:
+            self.data[key][0].remove(rid)
+            removed = True
+        
+        # Remove from tail
+        if rid in self.data[key][1]:
+            self.data[key][1].remove(rid)
+            removed = True
+        
+        # If both empty, delete the key
+        if not self.data[key][0] and not self.data[key][1]:
+            del self.data[key]
+        
+        return removed
 
 class Index:
 
@@ -96,37 +106,39 @@ class Index:
     #         return None
 
     def locate(self, column, value):
-        # testM2
-        if column >= len(self.indices):
-            ValueError('Invalid column index')
-        
-        if self.indices[column]:
-            if value not in self.indices[column].data.keys():
-                return [[], []]
-            res = self.indices[column].data[value]
-            # print('locate func: ', value, res)
-            return res
-        else:
-            # return None
-            # testM2: if column index not exist, return all records with the target value
-            res = [[],[]]
-            for rid, col_value in self.table.col_iterator(column):
-                if value == col_value:
-                    res[0].append(rid)
-            return res
+        with self.lock:
+            # testM2
+            if column >= len(self.indices):
+                ValueError('Invalid column index')
+            
+            if self.indices[column]:
+                if value not in self.indices[column].data.keys():
+                    return [[], []]
+                res = self.indices[column].data[value]
+                # print('locate func: ', value, res)
+                return res
+            else:
+                # return None
+                # testM2: if column index not exist, return all records with the target value
+                res = [[],[]]
+                for rid, col_value in self.table.col_iterator(column):
+                    if value == col_value:
+                        res[0].append(rid)
+                return res
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
 
     def locate_range(self, begin, end, column):
-        if column > len(self.indices):
-            ValueError('Invalid column index')
-        
-        if self.indices[column]:
-            return self.indices[column].value_in_range(begin, end)
-        else:
-            return None
+        with self.lock:
+            if column > len(self.indices):
+                ValueError('Invalid column index')
+            
+            if self.indices[column]:
+                return self.indices[column].value_in_range(begin, end)
+            else:
+                return None
 
     """
     # optional: Create index on specific column
@@ -189,9 +201,14 @@ class Index:
             for rid in base_rids:
                 self.indices[self.table.key].data[primary_key][0].remove(rid)
         
+        # if len(tail_rids) != 0:
+        #     for rid in base_rids:
+        #         self.indices[self.table.key].data[primary_key][0].remove(rid)
+        
+        # Yanliang's Modification here: Fix typo of tail_rids here
         if len(tail_rids) != 0:
-            for rid in base_rids:
-                self.indices[self.table.key].data[primary_key][0].remove(rid)
+            for rid in tail_rids:
+                self.indices[self.table.key].data[primary_key][1].remove(rid)
         
         return True
     

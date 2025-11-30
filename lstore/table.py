@@ -89,25 +89,62 @@ class PageRange:
         # return self.current_tail_page.has_capacity()
         return False if self.current_tail_page == None else self.current_tail_page.has_capacity()
     
-    def insert_base_record(self, rid, timestamp, columns):
+    # def insert_base_record(self, rid, timestamp, columns):
+    #     with self.lock:
+    #         if not self.has_base_capacity():
+    #             self._allocate_base_page()
+        
+    #         success = self.current_base_page.insert_record(rid, timestamp, columns)
+    #         if success:
+    #             # We need to re-write the index part
+    #             # page_index = len(self.base_pages) - 1
+    #             page_index = self.num_base_records // Config.PAGE_CAPACITY
+    #             record_index = self.current_base_page.num_records - 1
+    #             self.num_base_records += 1
+    #             return (page_index, record_index)
+    #         return None
+        
+    
+    # # Some specical prpcess here I think?
+    # def append_tail_record(self, rid, indirection, timestamp, schema_encoding, base_rid, columns):
+    #     with self.lock:
+    #         if not self.has_tail_capacity():
+    #             self._allocate_tail_page()
+        
+    #         success = self.current_tail_page.append_update(
+    #             rid, indirection, timestamp, schema_encoding, base_rid, columns
+    #         )
+    #         if success:
+    #             # page_index = len(self.tail_pages) - 1
+    #             page_index = self.num_tail_records // Config.PAGE_CAPACITY
+    #             record_index = self.current_tail_page.num_records - 1
+    #             self.num_tail_records += 1
+    #             return (page_index, record_index)
+    #         return None
+    
+    def insert_base_record_with_rid_alloc(self, timestamp, columns):
+        # Atomically allocate rid and insert base record
+        # return (rid, page_index, record_index) or None
         with self.lock:
+            rid = self.num_base_records
+            
             if not self.has_base_capacity():
                 self._allocate_base_page()
         
             success = self.current_base_page.insert_record(rid, timestamp, columns)
             if success:
-                # We need to re-write the index part
-                # page_index = len(self.base_pages) - 1
                 page_index = self.num_base_records // Config.PAGE_CAPACITY
                 record_index = self.current_base_page.num_records - 1
                 self.num_base_records += 1
-                return (page_index, record_index)
+                return (rid, page_index, record_index)
             return None
-        
     
-    # Some specical prpcess here I think?
-    def append_tail_record(self, rid, indirection, timestamp, schema_encoding, base_rid, columns):
+    def append_tail_record_with_rid_alloc(self, indirection, timestamp, schema_encoding, base_rid, columns):
+        # Atomically allocate rid and insert base record
+        # return (rid, page_index, record_index) or None
         with self.lock:
+            rid = self.num_tail_records
+            
             if not self.has_tail_capacity():
                 self._allocate_tail_page()
         
@@ -115,11 +152,10 @@ class PageRange:
                 rid, indirection, timestamp, schema_encoding, base_rid, columns
             )
             if success:
-                # page_index = len(self.tail_pages) - 1
                 page_index = self.num_tail_records // Config.PAGE_CAPACITY
                 record_index = self.current_tail_page.num_records - 1
                 self.num_tail_records += 1
-                return (page_index, record_index)
+                return (rid, page_index, record_index)
             return None
     
     def read_base_record(self, page_index, record_index):
@@ -452,49 +488,117 @@ class Table:
         
         # ***** new added
         self.key_to_rid = {} # primary key value -> rid mapping
+        self.key_to_rid_lock = threading.Lock()
         
         self.lock_manager = LockManager()
+        # Yanliang's Modification here: Add RID allocation lock
+        self.rid_lock = threading.Lock()
         
         pass
     
-    def get_version_rid(self, rid, relative_version):
-
-        # base record
-        page_idx =  rid // Config.PAGE_CAPACITY
-        record_idx = rid % Config.PAGE_CAPACITY
-
-        record = self.page_directory.read_base_record(page_idx, record_idx)
-        indirection = record['indirection']
-
-        # not indirection
-        if indirection == -1:
-            return rid, 'Base'
+    def allocate_base_rid(self):
+        # Allocate a new base RID atomically
+        with self.rid_lock:
+            rid = self.page_directory.num_base_records
+            # The real incrementation is transfered to insert_base_record()
+            return rid
         
-        # 1st updated record
-        rid = indirection
+    def allocate_tail_rid(self):
+        # Allocate a new tail RID atomically
+        with self.rid_lock:
+            rid = self.page_directory.num_tail_records
+            # The real incrementation is transfered to insert_tail_record()
+            return rid
+    
+    # def get_version_rid(self, rid, relative_version):
+
+    #     # base record
+    #     page_idx =  rid // Config.PAGE_CAPACITY
+    #     record_idx = rid % Config.PAGE_CAPACITY
+
+    #     record = self.page_directory.read_base_record(page_idx, record_idx)
+    #     indirection = record['indirection']
+
+    #     # not indirection
+    #     if indirection == -1:
+    #         return rid, 'Base'
+        
+    #     # 1st updated record
+    #     rid = indirection
+    #     page_idx = rid // Config.PAGE_CAPACITY
+    #     record_idx = rid % Config.PAGE_CAPACITY
+
+    #     record = self.page_directory.read_tail_record(page_idx, record_idx)
+    #     indirection = record['indirection']
+        
+    #     version = 0
+    #     while version > relative_version and indirection != -1:
+    #         rid = indirection
+    #         page_idx = rid // Config.PAGE_CAPACITY
+    #         record_idx = rid % Config.PAGE_CAPACITY
+
+    #         record = self.page_directory.read_tail_record(page_idx, record_idx)
+    #         indirection = record['indirection']
+
+    #         version -= 1
+
+    #     # find relative tail record
+    #     if version == relative_version:
+    #         return rid, 'Tail'
+    #     # relative version is base record
+    #     elif indirection == -1:
+    #         return rid, 'Base'
+    
+    def get_version_rid(self, rid, relative_version):
         page_idx = rid // Config.PAGE_CAPACITY
         record_idx = rid % Config.PAGE_CAPACITY
 
-        record = self.page_directory.read_tail_record(page_idx, record_idx)
-        indirection = record['indirection']
-        
-        version = 0
-        while version > relative_version and indirection != -1:
-            rid = indirection
-            page_idx = rid // Config.PAGE_CAPACITY
-            record_idx = rid % Config.PAGE_CAPACITY
-
-            record = self.page_directory.read_tail_record(page_idx, record_idx)
-            indirection = record['indirection']
-
-            version -= 1
-
-        # find relative tail record
-        if version == relative_version:
-            return rid, 'Tail'
-        # relative version is base record
-        elif indirection == -1:
+        # Read base record
+        base_record = self.page_directory.read_base_record(page_idx, record_idx)
+        if base_record is None:
             return rid, 'Base'
+        
+        indirection = base_record['indirection']
+
+        # If no update records
+        if indirection == -1:
+            return rid, 'Base'
+        
+        # relative_version = 0 
+        if relative_version == 0:
+            return indirection, 'Tail'
+        
+        # relative_version = -1 
+        if relative_version == -1:
+            return rid, 'Base'
+        
+        tail_rids = []
+        current_tail_rid = indirection
+        
+        while current_tail_rid != -1:
+            tail_rids.append(current_tail_rid)
+            
+            tail_page_idx = current_tail_rid // Config.PAGE_CAPACITY
+            tail_record_idx = current_tail_rid % Config.PAGE_CAPACITY
+            
+            tail_record = self.page_directory.read_tail_record(tail_page_idx, tail_record_idx)
+            if tail_record is None:
+                break
+            
+            current_tail_rid = tail_record['indirection']
+        
+        total_versions = 1 + len(tail_rids)
+        
+        target_index = -relative_version - 1  # -1->0, -2->1, -3->2, ...
+        
+        if target_index >= total_versions:
+            return rid, 'Base'
+        
+        if target_index == 0:
+            return rid, 'Base'
+        else:
+            tail_index = len(tail_rids) - target_index
+            return tail_rids[tail_index], 'Tail'
 
     # may exist issues, change to read_tail_record and read_base_record
     def get_col_value(self, rid, column_idx, page_type = 'Base'):
@@ -714,36 +818,85 @@ class Table:
         
         # get record to find key value
         record = self.page_directory.read_base_record(page_idx, record_idx)
-        if record:
-            columns = record['columns']
-            key_value = record['columns'][self.key]
+        if record is None:
+            return
+        # if record:
+        columns = record['columns']
+        key_value = record['columns'][self.key]
             
-            # remove from index
-            if self.index:
-                self.index.remove_from_index(rid, columns)
-            
-            # remove from page directory
-            self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
-            # remove from key_to_rid mapping
-            if key_value in self.key_to_rid:
-                del self.key_to_rid[key_value]
+        # remove from index
+        if self.index:
+            self.index.remove_from_index(rid, columns)
         
+        # set base record as ineffective
         self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
-        # indirection
-        self.page_directory.update_base_indirection(page_idx, record_idx, 0)
+        
+        # restore indirection
+        self.page_directory.update_base_indirection(page_idx, record_idx, -1)
+        
+        # remove from key_to_rid if used
+        if hasattr(self, 'key_to_rid_lock'):
+            with self.key_to_rid_lock:
+                if key_value in self.key_to_rid:
+                    del self.key_to_rid[key_value]
+        elif key_value in self.key_to_rid:
+            del self.key_to_rid[key_value]
+
     
     
-    def rollback_update(self, rid, old_indirection):
+    def rollback_update(self, rid, old_indirection, old_primary_key=None):
         """
         Undoes an update operation.
         1. Locates the base record using RID.
         2. Reverts the INDIRECTION column to point to 'old_indirection'.
         """
+        # page_idx = rid // Config.PAGE_CAPACITY
+        # record_idx = rid % Config.PAGE_CAPACITY
+        
+        # # update indirection to old_indirection
+        # self.page_directory.update_base_indirection(page_idx, record_idx, old_indirection)
+        
+        # Yanliang's Modification here: We only restore indirection here, leaving newly created tail records
+        # New design here:
+        # 1. Restore indirection
+        # 2. Mark new tail record as ineffective (RID => -1)
+        # 3. Remove newly created tail record from index
         page_idx = rid // Config.PAGE_CAPACITY
         record_idx = rid % Config.PAGE_CAPACITY
         
-        # update indirection to old_indirection
+        record = self.page_directory.read_base_record(page_idx, record_idx)
+        if record is None:
+            return
+        
+        new_tail_rid = record['indirection']
+        
+        # Restore indirection
         self.page_directory.update_base_indirection(page_idx, record_idx, old_indirection)
+        
+        # Mark new tail record as ineffective (RID => -1)
+        if new_tail_rid != -1 and new_tail_rid != old_indirection:
+            tail_page_idx = new_tail_rid // Config.PAGE_CAPACITY
+            tail_record_idx = new_tail_rid % Config.PAGE_CAPACITY
+            
+            tail_record = self.page_directory.read_tail_record(tail_page_idx, tail_record_idx)
+            if tail_record is not None:
+                self.page_directory.set_tail_record_value(
+                    tail_page_idx, 
+                    tail_record_idx, 
+                    Config.RID_COLUMN, 
+                    -1
+                )
+
+        # Restore index only when the primary key changes
+        if old_primary_key is not None:
+            current_primary_key = record['columns'][self.key]
+            if old_primary_key != current_primary_key:
+                # Remove new
+                if self.index.indices[self.key]:
+                    self.index.indices[self.key].remove_rid(current_primary_key, rid)
+                # Restore old
+                if self.index.indices[self.key]:
+                    self.index.indices[self.key].add(old_primary_key, rid, "Base")
     
     def rollback_delete(self, rid):
         """
@@ -756,18 +909,21 @@ class Table:
         
         # restore RID column to original value
         self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, rid)
-        
-        # TODO: restore Indirection
-        pass
     
         # restore index
         record = self.page_directory.read_base_record(page_idx, record_idx)
-        if record:
-            key_value = record['columns'][self.key]
+        if record is None:
+            return
+
+        columns = record['columns']
+        key_value = columns[self.key]
+        
+        if self.index:
+            self.index.insert_value(columns, rid, "Base")
             
-            # insert into index
-            # Question: base or tail?
-            if self.index:
-                self.index.insert_value(record['columns'], rid, "Base")
+        if hasattr(self, 'key_to_rid_lock'):
+            with self.key_to_rid_lock:
+                self.key_to_rid[key_value] = rid
+        else:
             self.key_to_rid[key_value] = rid
             

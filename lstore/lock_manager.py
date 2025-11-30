@@ -50,16 +50,20 @@ class LockManager:
                     if existing['type'] == LockType.EXCLUSIVE:
                         return True
                     else:
-                        # TODO: Not sure if we allow lock upgrade in Strong Strict 2PL
-                        if len(existing['holders']) == 1:
-                            # Only myself holds the SHARED lock, can upgrade
-                            existing['type'] = LockType.EXCLUSIVE
-                            return True
-                        else:
-                            # Other transactions also hold SHARED lock
-                            # NO-WAIT policy, cannot wait for them to release
-                            # So upgrade fails, may cause current transaction to Abort
-                            return False
+                        # Yanliang's Modification here: lock upgrading switch
+                        # # The following implementation allows lock upgrading
+                        # if len(existing['holders']) == 1:
+                        #     # Only myself holds the SHARED lock, can upgrade
+                        #     existing['type'] = LockType.EXCLUSIVE
+                        #     return True
+                        # else:
+                        #     # Other transactions also hold SHARED lock
+                        #     # NO-WAIT policy, cannot wait for them to release
+                        #     # So upgrade fails, may cause current transaction to Abort
+                        #     return False
+                        
+                        # The following implementation doesn't allow lock upgrading
+                        return False
                 else:
                     # EXCLUSIVE lock has already been assigned to other resource
                     return False

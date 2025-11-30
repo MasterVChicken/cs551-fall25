@@ -60,7 +60,7 @@ class Transaction:
             return self.abort()
     
     def abort(self):
-        #Abort transaction and rollback all changes.
+        # Abort transaction and rollback all changes.
         # Rollback in reverse order (LIFO)
         for table, op_type, rollback_data in reversed(self.operations_log):
             try:
@@ -71,7 +71,8 @@ class Transaction:
                 elif op_type == 'update':
                     rid = rollback_data['rid']
                     old_indirection = rollback_data['old_indirection']
-                    table.rollback_update(rid, old_indirection)
+                    old_primary_key = rollback_data.get('old_primary_key', None)  # 获取old_primary_key
+                    table.rollback_update(rid, old_indirection, old_primary_key)  # 传递所有参数
                     
                 elif op_type == 'delete':
                     rid = rollback_data['rid']
