@@ -33,31 +33,35 @@ class Query:
     # Returns True upon succesful deletion
     # Return False if record doesn't exist or is locked due to 2PL
     """
-    def delete(self, primary_key, transaction=None):
-        # get rid first
-        rid = self.table.key_to_rid.get(primary_key, None)
-        if rid is None:
-            return False
+    # def delete(self, primary_key, transaction=None):
+    #     # get rid first
+    #     rid = self.table.key_to_rid.get(primary_key, None)
+    #     if rid is None:
+    #         return False
         
-        # Acquire locks and record logs
-        if transaction is not None:
-            lock_acquired = self.table.lock_manager.acquire_lock(
-                lock_id=rid,
-                lock_type=LockType.EXCLUSIVE,
-                transaction_id=transaction.transaction_id
-            )
-            if not lock_acquired:
-                return False
+    #     # Acquire locks and record logs
+    #     if transaction is not None:
+    #         lock_acquired = self.table.lock_manager.acquire_lock(
+    #             lock_id=rid,
+    #             lock_type=LockType.EXCLUSIVE,
+    #             transaction_id=transaction.transaction_id
+    #         )
+    #         if not lock_acquired:
+    #             return False
             
-            transaction.log_operation(
-                table=self.table,
-                op_type='delete',
-                rollback_data={'rid': rid}
-            )
+    #         transaction.log_operation(
+    #             table=self.table,
+    #             op_type='delete',
+    #             rollback_data={'rid': rid}
+    #         )
             
-        # delete the record from table
-        self.table.delete_record_by_rid(rid)
-        pass
+    #     # delete the record from table
+    #     self.table.delete_record_by_rid(rid)
+    #     pass
+
+    # testM2
+    def delete(self, primary_key):
+        self.table.delete(primary_key)
     
     
     """
@@ -174,8 +178,12 @@ class Query:
                     col_value = self.table.page_directory.read_tail_record(next_rid//Config.PAGE_CAPACITY, next_rid%Config.PAGE_CAPACITY)['columns'][col_idx]
                     res_col[col_idx] = col_value
 
-            record = Record(next_rid, self.table.key, res_col)
-            records_list.append(record)
+            # record = Record(next_rid, self.table.key, res_col)
+            # records_list.append(record)
+            # testM2
+            if res_col[search_key_index] == search_key:
+                record = Record(next_rid, self.table.key, res_col) 
+                records_list.append(record)
         
         return records_list
 
@@ -190,16 +198,29 @@ class Query:
 
         # selected_rids = self.table.index.locate(self.table.key, primary_key)
        
-        rids_list = self.table.index.locate(self.table.key, primary_key)
-        # tmp_rid = [e[0] for e in rids_list]
-        # selected_rids = [x for row in tmp_rid for x in row]
-        selected_rids = rids_list[0]
+        # rids_list = self.table.index.locate(self.table.key, primary_key)
+        # # tmp_rid = [e[0] for e in rids_list]
+        # # selected_rids = [x for row in tmp_rid for x in row]
+        # selected_rids = rids_list[0]
 
-        if selected_rids == None:
-            return False
+        # if selected_rids == None:
+        #     return False
         
-        # print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
+        # # print(f"\nupdate func, primary_key_value: {primary_key}, rids: {selected_rids}, input column: {columns}")
+        # rid = selected_rids[0]
+
+        # testM2M1
+        rids_list = self.table.index.locate(self.table.key, primary_key)
+        selected_rids = rids_list[0]
+        if selected_rids == None or len(selected_rids) > 1 or len(selected_rids) == 0:
+            return False
         rid = selected_rids[0]
+
+        update_primary_key = columns[self.table.key]
+        rids_list = self.table.index.locate(self.table.key, update_primary_key)
+        selected_rids = rids_list[0]
+        if selected_rids == None or len(selected_rids) > 0:
+            return False
         
         # Acquire locks
         if transaction is not None:
@@ -286,11 +307,11 @@ class Query:
         # print(f'Before update index: primary_key_idx: {self.table.key}, primary_key_value: {primary_key}, updated_record_rid: {updated_rid}')
         self.table.index.update_index(self.table.key, primary_key, updated_rid, "Tail")
 
-        # merge add here
-        merge_threshold = 15
-        if (self.table.page_directory.num_tail_records // Config.PAGE_CAPACITY) % merge_threshold == 0:
-            # print("Call merge")
-            self.table.merge()
+        # # merge add here
+        # merge_threshold = 15
+        # if (self.table.page_directory.num_tail_records // Config.PAGE_CAPACITY) % merge_threshold == 0:
+        #     # print("Call merge")
+        #     self.table.merge()
 
         return True
 

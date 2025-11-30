@@ -80,20 +80,40 @@ class Index:
     # returns the location of all records with the given value on column "column"
     """     
 
+    # def locate(self, column, value):
+    #     if column > len(self.indices):
+    #         ValueError('Invalid column index')
+        
+    #     if self.indices[column]:
+    #         # print(111, self.indices[column].data)
+    #         try:
+    #             res = self.indices[column].data[value]
+    #             # print('locate func: ', value, res)
+    #         except KeyError:
+    #             res = None
+    #         return res
+    #     else:
+    #         return None
+
     def locate(self, column, value):
-        if column > len(self.indices):
+        # testM2
+        if column >= len(self.indices):
             ValueError('Invalid column index')
         
         if self.indices[column]:
-            # print(111, self.indices[column].data)
-            try:
-                res = self.indices[column].data[value]
-                # print('locate func: ', value, res)
-            except KeyError:
-                res = None
+            if value not in self.indices[column].data.keys():
+                return [[], []]
+            res = self.indices[column].data[value]
+            # print('locate func: ', value, res)
             return res
         else:
-            return None
+            # return None
+            # testM2: if column index not exist, return all records with the target value
+            res = [[],[]]
+            for rid, col_value in self.table.col_iterator(column):
+                if value == col_value:
+                    res[0].append(rid)
+            return res
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -147,14 +167,32 @@ class Index:
     def drop_index(self, column_number):
         self.indices[column_number] = None
 
+    # def delete_value(self, primary_key):
+    #     rids = self.locate(self.table.key, primary_key)
+        
+    #     # primary ket only should have only one rid
+    #     if rids == None or len(rids) > 2:
+    #         return False
+        
+    #     self.indices[self.table.key].data[primary_key].pop(rids[0])
+    #     return True
+    
+    # test M2
     def delete_value(self, primary_key):
         rids = self.locate(self.table.key, primary_key)
+        # print(rids)
         
-        # primary ket only should have only one rid
-        if rids == None or len(rids) > 2:
-            return False
+        base_rids = rids[0]
+        tail_rids = rids[1]
+
+        if len(base_rids) != 0:
+            for rid in base_rids:
+                self.indices[self.table.key].data[primary_key][0].remove(rid)
         
-        self.indices[self.table.key].data[primary_key].pop(rids[0])
+        if len(tail_rids) != 0:
+            for rid in base_rids:
+                self.indices[self.table.key].data[primary_key][0].remove(rid)
+        
         return True
     
     def insert_value(self, columns, rid, page_tye):

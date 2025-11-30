@@ -573,16 +573,39 @@ class Table:
     
     # TODO: implement delete by rid
     def delete(self, primary_key):
-        # get rid list [base_rid, tail_rid1, tail_rid2, ...]
-        rids = self.indexlocate(self.key, primary_key)
-        for idx, rid in enumerate(rid):
-            # set rid to -1 (or other invalidate value) ?
-            page_idx = rid // Config.PAGE_CAPACITY
-            record_idx = rid % Config.PAGE_CAPACITY
-            if idx == 0:
+        # # get rid list [base_rid, tail_rid1, tail_rid2, ...]
+        # rids = self.indexlocate(self.key, primary_key)
+        # for idx, rid in enumerate(rid):
+        #     # set rid to -1 (or other invalidate value) ?
+        #     page_idx = rid // Config.PAGE_CAPACITY
+        #     record_idx = rid % Config.PAGE_CAPACITY
+        #     if idx == 0:
+        #         self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
+        #     else:
+        #         self.page_directory.set_tail_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
+        rids_list = self.index.locate(self.key, primary_key)
+        base_rids = rids_list[0]
+        tail_rids = rids_list[1]
+
+        # print(rids_list)
+
+        if len(base_rids) != 0:
+            for idx, rid in enumerate(base_rids):
+                # set rid to -1 (or other invalidate value) ?
+                page_idx = rid // Config.PAGE_CAPACITY
+                record_idx = rid % Config.PAGE_CAPACITY
                 self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
-            else:
+                # print(self.page_directory.read_base_record(page_idx, record_idx))
+
+                self.index.delete_value(primary_key)
+        
+        if len(tail_rids) != 0:
+            for idx, rid in enumerate(tail_rids):
+                # set rid to -1 (or other invalidate value) ?
+                page_idx = rid // Config.PAGE_CAPACITY
+                record_idx = rid % Config.PAGE_CAPACITY
                 self.page_directory.set_tail_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
+    
     
 
     # Is merge not required?
