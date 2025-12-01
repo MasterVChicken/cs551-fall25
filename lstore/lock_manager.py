@@ -16,8 +16,6 @@ class LockManager:
         
     def acquire_lock(self, lock_id, lock_type, transaction_id):
         # Acquire a lock with NO-WAIT policy
-        # return True if lock acquired successfully
-        # return False if lock cannot be acquired
         with self.lock:
             # if no existing lock on this sources
             if lock_id not in self.locks:
@@ -67,7 +65,6 @@ class LockManager:
     
     def release_lock(self, lock_id, transaction_id):
         # Release a specific lock
-        # In Strong Strict 2PL, it will only be called at commit/abot
         with self.lock:
             if lock_id in self.locks:
                 self.locks[lock_id]['holders'].discard(transaction_id)

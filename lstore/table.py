@@ -39,7 +39,7 @@ class PageRange:
         self.num_columns = num_columns
                 
         # LRU cache
-        self.cache_capacity = 1000 # enlarged the cache capacity
+        self.cache_capacity = 1000
         self.Buffer = LRUCache(self.cache_capacity)
         
         self.current_base_page = None
@@ -89,38 +89,6 @@ class PageRange:
         # return self.current_tail_page.has_capacity()
         return False if self.current_tail_page == None else self.current_tail_page.has_capacity()
     
-    # def insert_base_record(self, rid, timestamp, columns):
-    #     with self.lock:
-    #         if not self.has_base_capacity():
-    #             self._allocate_base_page()
-        
-    #         success = self.current_base_page.insert_record(rid, timestamp, columns)
-    #         if success:
-    #             # We need to re-write the index part
-    #             # page_index = len(self.base_pages) - 1
-    #             page_index = self.num_base_records // Config.PAGE_CAPACITY
-    #             record_index = self.current_base_page.num_records - 1
-    #             self.num_base_records += 1
-    #             return (page_index, record_index)
-    #         return None
-        
-    
-    # # Some specical prpcess here I think?
-    # def append_tail_record(self, rid, indirection, timestamp, schema_encoding, base_rid, columns):
-    #     with self.lock:
-    #         if not self.has_tail_capacity():
-    #             self._allocate_tail_page()
-        
-    #         success = self.current_tail_page.append_update(
-    #             rid, indirection, timestamp, schema_encoding, base_rid, columns
-    #         )
-    #         if success:
-    #             # page_index = len(self.tail_pages) - 1
-    #             page_index = self.num_tail_records // Config.PAGE_CAPACITY
-    #             record_index = self.current_tail_page.num_records - 1
-    #             self.num_tail_records += 1
-    #             return (page_index, record_index)
-    #         return None
     
     def insert_base_record_with_rid_alloc(self, timestamp, columns):
         # Atomically allocate rid and insert base record
@@ -391,8 +359,6 @@ class PageRange:
 
     def save_to_disk(self):
         # save all base pages
-        # for idx, base_page in enumerate(self.base_pages):
-        # for idx in self.base_pages.cache:
         for idx in self.Buffer.base_cache:
             for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
                 # base_page = self.base_pages.cache[idx]
@@ -412,8 +378,6 @@ class PageRange:
                     fp.write(page_data)
 
         # save all tail pages
-        # for idx, tail_page in enumerate(self.tail_pages):
-        # for idx in self.tail_pages.cache:
         for idx in self.Buffer.tail_cache:
             for column_idx in range(self.num_columns + Config.USER_COLUMN_START):
                 # tail_page = self.tail_pages.cache[idx]
@@ -483,10 +447,10 @@ class Table:
         self.num_columns = num_columns
         # self.page_directory = {}
         self.table_path = os.path.join(dp_path, name)
-        self.page_directory = PageRange(self.table_path, 0, num_columns, num_base_records, num_tail_records) # set range_id to 0
+        self.page_directory = PageRange(self.table_path, 0, num_columns, num_base_records, num_tail_records)
         self.index = Index(self)
         
-        # ***** new added
+        # new added
         self.key_to_rid = {} # primary key value -> rid mapping
         self.key_to_rid_lock = threading.Lock()
         
@@ -494,12 +458,8 @@ class Table:
         # Yanliang's Modification here: Add RID allocation lock
         self.rid_lock = threading.Lock()
         
-        # === new added ===
-        self.is_merging = False # control the merge thread - DISABLED for now
+        self.is_merging = False
         self.merge_thread = None
-        # self.merge_thread = threading.Thread(target=self.__merge_worker)
-        # self.merge_thread.daemon = True # set as daemon thread, it will exit when the main program exits
-        # self.merge_thread.start()
         
         pass
     
@@ -570,8 +530,7 @@ class Table:
             # if the depth is within the Tail chain, return the corresponding tail rid
             return tail_rids[depth], 'Tail'
         else:
-            # if the depth exceeds the Tail chain (e.g., 1 update, request v-1 or v-2),
-            # it means the version is in the Base Page.
+            # if the depth exceeds the Tail chain
             return rid, 'Base'
 
     # may exist issues, change to read_tail_record and read_base_record
@@ -651,16 +610,6 @@ class Table:
     
     # TODO: implement delete by rid
     def delete(self, primary_key):
-        # # get rid list [base_rid, tail_rid1, tail_rid2, ...]
-        # rids = self.indexlocate(self.key, primary_key)
-        # for idx, rid in enumerate(rid):
-        #     # set rid to -1 (or other invalidate value) ?
-        #     page_idx = rid // Config.PAGE_CAPACITY
-        #     record_idx = rid % Config.PAGE_CAPACITY
-        #     if idx == 0:
-        #         self.page_directory.set_base_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
-        #     else:
-        #         self.page_directory.set_tail_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
         rids_list = self.index.locate(self.key, primary_key)
         base_rids = rids_list[0]
         tail_rids = rids_list[1]
@@ -684,96 +633,6 @@ class Table:
                 record_idx = rid % Config.PAGE_CAPACITY
                 self.page_directory.set_tail_record_value(page_idx, record_idx, Config.RID_COLUMN, -1)
     
-    
-
-    # # Is merge not required?
-    # def merge(self):
-    #     # print("merge is happening")
-    #     # suppose we merge first 3 tail pages once merge.
-    #     merge_tail_page_indices = [0, 1, 2]
-        
-    #     for tail_page_idx in merge_tail_page_indices:
-    #         num_tail_pages = math.ceil(self.page_directory.num_tail_records / Config.PAGE_CAPACITY)
-    #         # check tail_page_idx not out of range
-    #         if(tail_page_idx >= num_tail_pages):
-    #             return False
-
-    #         # base rids for all current tail pages
-    #         # tail_page_base_rids = self.page_directory.get_tail_page(tail_page_idx, Config.BASE_RID_COLUMN)
-    #         # tail_page_schema = self.page_directory.get_tail_page(tail_page_idx, Config.SCHEMA_ENCODING_COLUMN)
-    #         # tail_page_rid = self.page_directory.get_tail_page(tail_page_idx, Config.RID_COLUMN)
-
-    #         # tail_page = self.page_directory.tail_pages.get(tail_page_idx)
-    #         tail_page = self.page_directory.Buffer.get(tail_page_idx, "Tail")
-    #         if tail_page == None:
-    #             tail_page = self.page_directory.load_one_tail_page_from_disk(tail_page_idx)
-    #             if tail_page == None:
-    #                 continue
-    #             # evict = self.page_directory.tail_pages.put(tail_page_idx, tail_page)
-    #             evict = self.page_directory.Buffer.put(tail_page_idx, tail_page, "Tail")
-    #             if evict != None: 
-    #                 self.page_directory.save_one_page_to_disk(evict[0], evict[1], "Tail")
-
-    #         tail_page_base_rids = tail_page.get_a_page(Config.BASE_RID_COLUMN)
-    #         tail_page_schema = tail_page.get_a_page(Config.SCHEMA_ENCODING_COLUMN)
-    #         tail_page_rid = tail_page.get_a_page(Config.RID_COLUMN)
-            
-    #         base_page_copies = [{} for _ in range(self.num_columns)]
-
-    #         # for each column
-    #         for col_idx in range(self.num_columns):
-    #             # get the tail page for this column
-    #             # tail_page = self.page_directory.get_tail_page(tail_page_idx, col_idx)
-    #             tail_page_column = tail_page.get_a_page(col_idx+Config.USER_COLUMN_START)
-
-    #             updated = []
-    #             # from the last updated tail record
-    #             for rec_idx in range((tail_page_column.num_items - 1), -1, -1):
-    #                 column_value = tail_page_column.read(rec_idx)
-    #                 base_rid = tail_page_base_rids.read(rec_idx)
-    #                 # find the corresponding base page
-    #                 base_page_idx = base_rid // Config.PAGE_CAPACITY
-
-    #                 if base_page_idx not in base_page_copies[col_idx]:
-    #                     # base_page = copy.deepcopy(self.page_directory.get_base_page(base_page_idx, col_idx))
-    #                     # base_page = (self.page_directory.base_pages.get(base_page_idx))
-    #                     base_page = (self.page_directory.Buffer.get(base_page_idx, "Base"))
-    #                     # print(base_page)
-    #                     if base_page == None:
-    #                         base_page = self.page_directory.load_one_base_page_from_disk(base_page_idx)
-    #                         if base_page == None:
-    #                             continue
-    #                         # evict = self.base_pages.put(base_page_idx, base_page)
-    #                         evict = self.page_directory.Buffer.put(base_page_idx, base_page, "Base")
-    #                         if evict != None: 
-    #                             self.page_directory.save_one_page_to_disk(evict[0], evict[1], "Base")
-                        
-    #                     base_page_copies[col_idx][base_page_idx] = copy.deepcopy(base_page.physical_pages[col_idx+Config.USER_COLUMN_START])
-
-    #                 # base record has not been updated
-    #                 if base_rid not in updated:
-    #                     updated.append(base_rid)
-    #                     if (tail_page_schema.read(rec_idx) >> col_idx) & 1:
-    #                         base_rec_idx = base_rid % Config.PAGE_CAPACITY
-    #                         base_page_copies[col_idx][base_page_idx].update(base_rec_idx, column_value)
-                    
-    #                 # get the tsp of current base page
-    #                 base_record_idx = base_rid % Config.PAGE_CAPACITY
-    #                 tsp = self.page_directory.read_base_record(base_page_idx, base_record_idx)['base_rid']
-    #                 tid = tail_page_rid.read(rec_idx)
-    #                 # update current tsp for the base record
-    #                 if tid > tsp:
-    #                     self.page_directory.update_base_tsp(base_page_idx, base_record_idx, tid)
-
-    #         # overwrite the original base page with the updated copied base page
-    #         for col_idx in range(self.num_columns):
-    #             for page_idx in base_page_copies[col_idx].keys():
-    #                 # self.page_directory.base_pages[page_idx] = base_page_copies[col_idx][page_idx]
-    #                 self.page_directory.Buffer.set(page_idx, base_page_copies[col_idx][page_idx], (col_idx+Config.USER_COLUMN_START), "Base")
-    
-    
-    # In lstore/table.py -> class Table
-
     def merge(self):
         # obtain the number of tail pages
         num_tail_pages = math.ceil(self.page_directory.num_tail_records / Config.PAGE_CAPACITY)
@@ -853,8 +712,6 @@ class Table:
             # Schema -> 0 (no Tail Update)
             self.page_directory.update_base_schema_encoding(page_idx, rec_idx, 0)
                     
-    # more methods coupled with saving DB
-    # ---------- persistence helpers ----------
 
     # close function for Table class
     def close(self):
@@ -909,12 +766,6 @@ class Table:
         1. Locates the base record using RID.
         2. Reverts the INDIRECTION column to point to 'old_indirection'.
         """
-        # page_idx = rid // Config.PAGE_CAPACITY
-        # record_idx = rid % Config.PAGE_CAPACITY
-        
-        # # update indirection to old_indirection
-        # self.page_directory.update_base_indirection(page_idx, record_idx, old_indirection)
-        
         # Yanliang's Modification here: We only restore indirection here, leaving newly created tail records
         # New design here:
         # 1. Restore indirection

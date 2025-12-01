@@ -5,7 +5,6 @@ import traceback
 
 class Transaction:
     # We follow the designs for Strict Strong 2PL lock
-    
     # global transaction id and id_protector to generate unique id in multi-thread env
     transaction_id_counter = 0
     id_lock = threading.Lock()
@@ -71,8 +70,8 @@ class Transaction:
                 elif op_type == 'update':
                     rid = rollback_data['rid']
                     old_indirection = rollback_data['old_indirection']
-                    old_primary_key = rollback_data.get('old_primary_key', None)  # 获取old_primary_key
-                    table.rollback_update(rid, old_indirection, old_primary_key)  # 传递所有参数
+                    old_primary_key = rollback_data.get('old_primary_key', None)
+                    table.rollback_update(rid, old_indirection, old_primary_key)
                     
                 elif op_type == 'delete':
                     rid = rollback_data['rid']

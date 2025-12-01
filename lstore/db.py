@@ -38,14 +38,14 @@ class Database():
         if not self.path:
             return
 
-        # 1) save each table as a separate file
+        # save each table as a separate file
         for name, table in self.tables.items():
             table_path = os.path.join(self.path, f"{name}")
             if (not os.path.exists(table_path)):
                 os.makedirs(table_path)
             table.close()
         
-        # 2) save meta data to json
+        # save meta data to json
         meta = {"tables": {}}
         for name, table in self.tables.items():
             meta["tables"][name] = {

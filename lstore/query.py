@@ -33,33 +33,7 @@ class Query:
     # Returns True upon succesful deletion
     # Return False if record doesn't exist or is locked due to 2PL
     """
-    # def delete(self, primary_key, transaction=None):
-    #     # get rid first
-    #     rid = self.table.key_to_rid.get(primary_key, None)
-    #     if rid is None:
-    #         return False
-        
-    #     # Acquire locks and record logs
-    #     if transaction is not None:
-    #         lock_acquired = self.table.lock_manager.acquire_lock(
-    #             lock_id=rid,
-    #             lock_type=LockType.EXCLUSIVE,
-    #             transaction_id=transaction.transaction_id
-    #         )
-    #         if not lock_acquired:
-    #             return False
-            
-    #         transaction.log_operation(
-    #             table=self.table,
-    #             op_type='delete',
-    #             rollback_data={'rid': rid}
-    #         )
-            
-    #     # delete the record from table
-    #     self.table.delete_record_by_rid(rid)
-    #     pass
-
-    # testM2
+    
     def delete(self, primary_key, transaction=None):
         # self.table.delete(primary_key)
         
@@ -146,25 +120,9 @@ class Query:
                 op_type='insert',
                 rollback_data={'rid': new_rid}
             )
-
-        # # add the record to table
-        # # res1 = self.table.add_record(columns, "Base")
-        # res1 = self.table.page_directory.insert_base_record(new_rid, new_timestamp, columns)
-        # if res1 == None:
-        #     return False
-
-        # # print(new_rid, columns)
         
         res2 = self.table.index.insert_value(columns, new_rid, "Base")
         
-        # # Record logs
-        # if transaction is not None:
-        #     transaction.log_operation(
-        #         table=self.table,
-        #         op_type='insert',
-        #         rollback_data={'rid': new_rid}
-        #     )
-
         return res2
 
     
@@ -191,65 +149,7 @@ class Query:
     # Returns a list of Record objects upon success
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
-    """
-    # def select_version(self, search_key, search_key_index, projected_columns_index, relative_version, transaction=None):
-    #     # selected_rids = self.table.index.locate(search_key_index, search_key)
-    #     rids_list = self.table.index.locate(search_key_index, search_key)
-        
-    #     # return empty if no record found
-    #     if rids_list is None:
-    #         return []
-        
-    #     # tmp_rid = [e[0] for e in rids_list]
-    #     # selected_rids = [x for row in tmp_rid for x in row]
-    #     selected_rids = rids_list[0]
-        
-    #     # selected_rids = [selected_rids[0]]
-    #     # print(f"Select version: search_key_index: {search_key_index}, search_key: {search_key}, selected_rids: {selected_rids}")
-        
-    #     # Acquire locks
-    #     if transaction is not None:
-    #         for rid in selected_rids:
-    #             lock_acquired = self.table.lock_manager.acquire_lock(
-    #                 lock_id=rid,
-    #                 lock_type=LockType.SHARED,
-    #                 transaction_id=transaction.transaction_id
-    #             )
-    #             if not lock_acquired:
-    #                 return False
-
-    #     records_list = []
-    #     for rid in selected_rids:
-    #         version_rid, page_type = self.table.get_version_rid(rid, relative_version)
-    #         res_col = []
-    #         for col_idx, projected_value in enumerate(projected_columns_index):
-    #             # if projected_value is 1, get data of this column from base page
-    #             if projected_value:
-    #                 col_value = self.table.page_directory.read_base_record(rid//Config.PAGE_CAPACITY, rid%Config.PAGE_CAPACITY)['columns'][col_idx]
-    #                 res_col.append(col_value)
-    #             # for 0 value, should we append None?
-    #             # else:
-    #             #     res_col.appned()
-
-    #         # get data matched the relative version from base value
-    #         # print("get_version: ", rid)
-    #         next_rid, page_type = self.table.get_version_rid(rid, relative_version)
-
-    #         if page_type == 'Tail':
-    #             # need to edit schema?
-    #             for col_idx in range(len(projected_columns_index)):
-    #                 col_value = self.table.page_directory.read_tail_record(next_rid//Config.PAGE_CAPACITY, next_rid%Config.PAGE_CAPACITY)['columns'][col_idx]
-    #                 res_col[col_idx] = col_value
-
-    #         # record = Record(next_rid, self.table.key, res_col)
-    #         # records_list.append(record)
-    #         # testM2
-    #         if res_col[search_key_index] == search_key:
-    #             record = Record(next_rid, self.table.key, res_col) 
-    #             records_list.append(record)
-        
-    #     return records_list
-    
+    """    
     
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version, transaction=None):
         rids_list = self.table.index.locate(search_key_index, search_key)
@@ -259,7 +159,6 @@ class Query:
         
         selected_rids = rids_list[0]
         
-        # 获取锁
         if transaction is not None:
             for rid in selected_rids:
                 lock_acquired = self.table.lock_manager.acquire_lock(
@@ -275,7 +174,7 @@ class Query:
             page_idx = rid // Config.PAGE_CAPACITY
             record_idx = rid % Config.PAGE_CAPACITY
 
-            # Step 1: Read base record to get initial values for all columns
+            # Read base record to get initial values for all columns
             base_record = self.table.page_directory.read_base_record(page_idx, record_idx)
             if base_record is None:
                 continue
@@ -284,7 +183,7 @@ class Query:
             result_columns = base_record['columns'].copy()
             indirection = base_record['indirection']
 
-            # Step 2: Apply updates based on relative_version
+            # Apply updates based on relative_version
             if indirection != -1:
                 if relative_version == 0:
                     # Version 0: Apply all updates from tail chain (latest version)
@@ -313,9 +212,6 @@ class Query:
 
                 elif relative_version < 0:
                     # Negative version: Apply updates up to a certain depth
-                    # relative_version = -1 means 1 version back, -2 means 2 versions back, etc.
-                    # Version -1 means skip the latest 1 update
-                    # Version -2 means skip the latest 2 updates
                     depth = abs(relative_version)
 
                     # Collect tail chain
@@ -334,8 +230,6 @@ class Query:
                         current_tail_rid = tail_record['indirection']
 
                     # tail_chain is ordered from newest to oldest
-                    # If depth >= len(tail_chain), we want the base version (no updates)
-                    # Otherwise, skip the latest 'depth' updates and apply the rest
                     if depth < len(tail_chain):
                         # Skip the latest 'depth' updates
                         # Apply updates from oldest up to (len - depth)
@@ -347,15 +241,14 @@ class Query:
                             for col_idx in range(len(result_columns)):
                                 if (schema >> col_idx) & 1:
                                     result_columns[col_idx] = tail_record['columns'][col_idx]
-                    # else: depth >= len(tail_chain), keep base version (no updates applied)
 
-            # Step 3: Project columns based on projected_columns_index
+            # Project columns based on projected_columns_index
             res_col = []
             for col_idx, projected in enumerate(projected_columns_index):
                 if projected:
                     res_col.append(result_columns[col_idx])
 
-            # Step 4: Filter by search key
+            # Filter by search key
             if res_col[search_key_index] == search_key:
                 record_obj = Record(rid, self.table.key, res_col)
                 records_list.append(record_obj)
@@ -581,7 +474,7 @@ class Query:
                     # Apply updates if within the tail chain
                     # Skip the latest 'depth' updates
                     if depth < len(tail_chain):
-                        updates_to_apply = tail_chain[depth:]  # Skip first 'depth' elements
+                        updates_to_apply = tail_chain[depth:]
 
                         for tail_record in reversed(updates_to_apply):
                             schema = tail_record['schema_encoding']

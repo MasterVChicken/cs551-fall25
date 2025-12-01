@@ -90,24 +90,8 @@ class Index:
     # returns the location of all records with the given value on column "column"
     """     
 
-    # def locate(self, column, value):
-    #     if column > len(self.indices):
-    #         ValueError('Invalid column index')
-        
-    #     if self.indices[column]:
-    #         # print(111, self.indices[column].data)
-    #         try:
-    #             res = self.indices[column].data[value]
-    #             # print('locate func: ', value, res)
-    #         except KeyError:
-    #             res = None
-    #         return res
-    #     else:
-    #         return None
-
     def locate(self, column, value):
         with self.lock:
-            # testM2
             if column >= len(self.indices):
                 ValueError('Invalid column index')
             
@@ -118,7 +102,6 @@ class Index:
                 # print('locate func: ', value, res)
                 return res
             else:
-                # return None
                 # testM2: if column index not exist, return all records with the target value
                 res = [[],[]]
                 for rid, col_value in self.table.col_iterator(column):
@@ -178,16 +161,6 @@ class Index:
 
     def drop_index(self, column_number):
         self.indices[column_number] = None
-
-    # def delete_value(self, primary_key):
-    #     rids = self.locate(self.table.key, primary_key)
-        
-    #     # primary ket only should have only one rid
-    #     if rids == None or len(rids) > 2:
-    #         return False
-        
-    #     self.indices[self.table.key].data[primary_key].pop(rids[0])
-    #     return True
     
     # test M2
     def delete_value(self, primary_key):
@@ -200,10 +173,6 @@ class Index:
         if len(base_rids) != 0:
             for rid in base_rids:
                 self.indices[self.table.key].data[primary_key][0].remove(rid)
-        
-        # if len(tail_rids) != 0:
-        #     for rid in base_rids:
-        #         self.indices[self.table.key].data[primary_key][0].remove(rid)
         
         # Yanliang's Modification here: Fix typo of tail_rids here
         if len(tail_rids) != 0:

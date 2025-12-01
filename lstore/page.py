@@ -72,15 +72,6 @@ class BasePage():
     def __init__(self, num_columns):
         self.num_columns = num_columns
         
-        # # column indexes
-        # self.INDIRECTION_COLUMN = 0
-        # self.RID_COLUMN = 1
-        # self.TIMESTAMP_COLUMN = 2
-        # self.SCHEMA_ENCODING_COLUMN = 3
-
-        # self.BASE_RID_COLUMN = 4
-        # self.USER_COLUMN_START = 5
-        
         self.physical_pages = [Page() for _ in range(Config.USER_COLUMN_START + num_columns)]
         self.num_records = 0
         
@@ -135,17 +126,7 @@ class TailPage():
     # Only write when update existing records
     def __init__(self, num_columns):
         self.num_columns = num_columns
-        
-        # column indexes
-        # self.INDIRECTION_COLUMN = 0
-        # self.RID_COLUMN = 1
-        # self.TIMESTAMP_COLUMN = 2
-        # self.SCHEMA_ENCODING_COLUMN = 3
-
-        # self.BASE_RID_COLUMN = 4
-        # self.USER_COLUMN_START = 5
-
-        
+            
         self.physical_pages = [Page() for _ in range(Config.USER_COLUMN_START + num_columns)]
         self.num_records = 0
         
