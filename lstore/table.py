@@ -495,10 +495,11 @@ class Table:
         self.rid_lock = threading.Lock()
         
         # === new added ===
-        self.is_merging = True # control the merge thread
-        self.merge_thread = threading.Thread(target=self.__merge_worker)
-        self.merge_thread.daemon = True # set as daemon thread, it will exit when the main program exits
-        self.merge_thread.start()
+        self.is_merging = False # control the merge thread - DISABLED for now
+        self.merge_thread = None
+        # self.merge_thread = threading.Thread(target=self.__merge_worker)
+        # self.merge_thread.daemon = True # set as daemon thread, it will exit when the main program exits
+        # self.merge_thread.start()
         
         pass
     

@@ -272,33 +272,94 @@ class Query:
 
         records_list = []
         for rid in selected_rids:
-            version_rid, page_type = self.table.get_version_rid(rid, relative_version)
-            
-            res_col = []
-            if page_type == 'Base':
-                record = self.table.page_directory.read_base_record(
-                    version_rid // Config.PAGE_CAPACITY,
-                    version_rid % Config.PAGE_CAPACITY
-                )
-            else:
-                record = self.table.page_directory.read_tail_record(
-                    version_rid // Config.PAGE_CAPACITY,
-                    version_rid % Config.PAGE_CAPACITY
-                )
-            
-            if record is None:
+            page_idx = rid // Config.PAGE_CAPACITY
+            record_idx = rid % Config.PAGE_CAPACITY
+
+            # Step 1: Read base record to get initial values for all columns
+            base_record = self.table.page_directory.read_base_record(page_idx, record_idx)
+            if base_record is None:
                 continue
-            
-            columns = record['columns']
-            
+
+            # Start with base record columns
+            result_columns = base_record['columns'].copy()
+            indirection = base_record['indirection']
+
+            # Step 2: Apply updates based on relative_version
+            if indirection != -1:
+                if relative_version == 0:
+                    # Version 0: Apply all updates from tail chain (latest version)
+                    # Collect all tail records from newest to oldest
+                    tail_chain = []
+                    current_tail_rid = indirection
+
+                    while current_tail_rid != -1:
+                        tail_page_idx = current_tail_rid // Config.PAGE_CAPACITY
+                        tail_record_idx = current_tail_rid % Config.PAGE_CAPACITY
+                        tail_record = self.table.page_directory.read_tail_record(tail_page_idx, tail_record_idx)
+
+                        if tail_record is None:
+                            break
+
+                        tail_chain.append(tail_record)
+                        current_tail_rid = tail_record['indirection']
+
+                    # Apply updates from oldest to newest (reverse order)
+                    for tail_record in reversed(tail_chain):
+                        schema = tail_record['schema_encoding']
+                        for col_idx in range(len(result_columns)):
+                            # Check if this column was updated in this tail record
+                            if (schema >> col_idx) & 1:
+                                result_columns[col_idx] = tail_record['columns'][col_idx]
+
+                elif relative_version < 0:
+                    # Negative version: Apply updates up to a certain depth
+                    # relative_version = -1 means 1 version back, -2 means 2 versions back, etc.
+                    # Version -1 means skip the latest 1 update
+                    # Version -2 means skip the latest 2 updates
+                    depth = abs(relative_version)
+
+                    # Collect tail chain
+                    tail_chain = []
+                    current_tail_rid = indirection
+
+                    while current_tail_rid != -1:
+                        tail_page_idx = current_tail_rid // Config.PAGE_CAPACITY
+                        tail_record_idx = current_tail_rid % Config.PAGE_CAPACITY
+                        tail_record = self.table.page_directory.read_tail_record(tail_page_idx, tail_record_idx)
+
+                        if tail_record is None:
+                            break
+
+                        tail_chain.append(tail_record)
+                        current_tail_rid = tail_record['indirection']
+
+                    # tail_chain is ordered from newest to oldest
+                    # If depth >= len(tail_chain), we want the base version (no updates)
+                    # Otherwise, skip the latest 'depth' updates and apply the rest
+                    if depth < len(tail_chain):
+                        # Skip the latest 'depth' updates
+                        # Apply updates from oldest up to (len - depth)
+                        updates_to_apply = tail_chain[depth:]  # Skip first 'depth' elements (newest ones)
+
+                        # Apply from oldest to newest
+                        for tail_record in reversed(updates_to_apply):
+                            schema = tail_record['schema_encoding']
+                            for col_idx in range(len(result_columns)):
+                                if (schema >> col_idx) & 1:
+                                    result_columns[col_idx] = tail_record['columns'][col_idx]
+                    # else: depth >= len(tail_chain), keep base version (no updates applied)
+
+            # Step 3: Project columns based on projected_columns_index
+            res_col = []
             for col_idx, projected in enumerate(projected_columns_index):
                 if projected:
-                    res_col.append(columns[col_idx])
-            
+                    res_col.append(result_columns[col_idx])
+
+            # Step 4: Filter by search key
             if res_col[search_key_index] == search_key:
-                record_obj = Record(version_rid, self.table.key, res_col)
+                record_obj = Record(rid, self.table.key, res_col)
                 records_list.append(record_obj)
-        
+
         return records_list
 
     
@@ -463,25 +524,72 @@ class Query:
             page_idx = rid // Config.PAGE_CAPACITY
             record_idx = rid % Config.PAGE_CAPACITY
 
-            # get value from base page
-            value = self.table.page_directory.read_base_record(page_idx, record_idx)['columns'][aggregate_column_index]
+            # Read base record
+            base_record = self.table.page_directory.read_base_record(page_idx, record_idx)
+            if base_record is None:
+                continue
 
-            # select version
-            updated_rid, updated_page_type = self.table.get_version_rid(rid, relative_version)
+            # Start with base value for the aggregate column
+            value = base_record['columns'][aggregate_column_index]
+            indirection = base_record['indirection']
 
-            # page and record idx for relative version
-            updated_page_idx = updated_rid // Config.PAGE_CAPACITY
-            updated_record_idx = updated_rid % Config.PAGE_CAPACITY
+            # Apply updates based on relative_version
+            if indirection != -1:
+                if relative_version == 0:
+                    # Version 0: Apply all updates from tail chain (latest version)
+                    tail_chain = []
+                    current_tail_rid = indirection
 
-            # has the updated record
-            if updated_page_type == "Tail":
-                updated_schema = self.table.page_directory.read_tail_record(updated_page_idx, updated_record_idx)['schema_encoding']
-                
-                if ((updated_schema >> aggregate_column_index) & 1):
-                    value = self.table.page_directory.read_tail_record(updated_page_idx, updated_record_idx)['columns'][aggregate_column_index]
+                    while current_tail_rid != -1:
+                        tail_page_idx = current_tail_rid // Config.PAGE_CAPACITY
+                        tail_record_idx = current_tail_rid % Config.PAGE_CAPACITY
+                        tail_record = self.table.page_directory.read_tail_record(tail_page_idx, tail_record_idx)
+
+                        if tail_record is None:
+                            break
+
+                        tail_chain.append(tail_record)
+                        current_tail_rid = tail_record['indirection']
+
+                    # Apply updates from oldest to newest (reverse order)
+                    for tail_record in reversed(tail_chain):
+                        schema = tail_record['schema_encoding']
+                        # Check if the aggregate column was updated
+                        if (schema >> aggregate_column_index) & 1:
+                            value = tail_record['columns'][aggregate_column_index]
+
+                elif relative_version < 0:
+                    # Negative version: Apply updates up to a certain depth
+                    # Version -1 means skip the latest 1 update
+                    depth = abs(relative_version)
+
+                    # Collect tail chain
+                    tail_chain = []
+                    current_tail_rid = indirection
+
+                    while current_tail_rid != -1:
+                        tail_page_idx = current_tail_rid // Config.PAGE_CAPACITY
+                        tail_record_idx = current_tail_rid % Config.PAGE_CAPACITY
+                        tail_record = self.table.page_directory.read_tail_record(tail_page_idx, tail_record_idx)
+
+                        if tail_record is None:
+                            break
+
+                        tail_chain.append(tail_record)
+                        current_tail_rid = tail_record['indirection']
+
+                    # Apply updates if within the tail chain
+                    # Skip the latest 'depth' updates
+                    if depth < len(tail_chain):
+                        updates_to_apply = tail_chain[depth:]  # Skip first 'depth' elements
+
+                        for tail_record in reversed(updates_to_apply):
+                            schema = tail_record['schema_encoding']
+                            if (schema >> aggregate_column_index) & 1:
+                                value = tail_record['columns'][aggregate_column_index]
 
             res += value
-        
+
         return res
 
     

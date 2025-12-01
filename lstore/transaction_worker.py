@@ -8,11 +8,11 @@ class TransactionWorker:
     """
     # Creates a transaction worker object.
     """
-    def __init__(self, transactions = []):
+    def __init__(self, transactions = None):
         self.stats = []
-        self.transactions = transactions
+        self.transactions = transactions if transactions is not None else []
         self.result = 0
-        
+
         self.thread = None
 
     
